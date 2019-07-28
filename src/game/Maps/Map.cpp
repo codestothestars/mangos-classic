@@ -93,7 +93,8 @@ Map::Map(uint32 id, time_t expiry, uint32 InstanceId)
       m_VisibleDistance(DEFAULT_VISIBILITY_DISTANCE), m_persistentState(nullptr),
       m_activeNonPlayersIter(m_activeNonPlayers.end()), m_onEventNotifiedIter(m_onEventNotifiedObjects.end()),
       i_gridExpiry(expiry), m_TerrainData(sTerrainMgr.LoadTerrain(id)),
-      i_data(nullptr), i_script_id(0)
+      i_data(nullptr), i_script_id(0),
+      m_cycleCounter(0), m_updateTimeMin(INT_MAX), m_updateTimeMax(0), m_updateTimeTotal(0)
 {
     m_weatherSystem = new WeatherSystem(this);
 }
@@ -120,7 +121,7 @@ void Map::Initialize(bool loadInstanceData /*= true*/)
     m_TerrainData->AddRef();
     CreateInstanceData(loadInstanceData);
 
-    m_persistentState = sMapPersistentStateMgr.AddPersistentState(i_mapEntry, GetInstanceId(), 0, IsDungeon(), false, false);
+    m_persistentState = sMapPersistentStateMgr.AddPersistentState(i_mapEntry, GetInstanceId(), 0, IsDungeon(), false);
     m_persistentState->SetUsedByMapState(this);
     m_persistentState->InitPools();
 
@@ -226,8 +227,7 @@ void Map::DeleteFromWorld(Player* pl)
     delete pl;
 }
 
-void
-Map::EnsureGridCreated(const GridPair& p)
+void Map::EnsureGridCreated(const GridPair& p)
 {
     if (!getNGrid(p.x_coord, p.y_coord))
     {
@@ -248,8 +248,7 @@ Map::EnsureGridCreated(const GridPair& p)
     }
 }
 
-void
-Map::EnsureGridLoadedAtEnter(const Cell& cell, Player* player)
+void Map::EnsureGridLoadedAtEnter(const Cell& cell, Player* player)
 {
     NGridType* grid;
 
@@ -299,6 +298,16 @@ bool Map::EnsureGridLoaded(const Cell& cell)
     }
 
     return false;
+}
+
+uint32 Map::GetLoadedGridsCount()
+{
+    uint32 count = 0;
+    for (uint32 i = 0; i < MAX_NUMBER_OF_GRIDS; ++i)
+        for (uint32 k = 0; k < MAX_NUMBER_OF_GRIDS; ++k)
+            if (i_grids[i][k] && i_grids[i][k]->GetGridState() == GRID_STATE_ACTIVE)
+                ++count;
+    return count;
 }
 
 void Map::ForceLoadGrid(float x, float y)
@@ -380,7 +389,7 @@ Map::Add(T* obj)
     if (obj->isActiveObject())
         AddToActive(obj);
 
-    DEBUG_LOG("%s enters grid[%u,%u]", obj->GetGuidStr().c_str(), cell.GridX(), cell.GridY());
+    DEBUG_FILTER_LOG(LOG_FILTER_CREATURE_MOVES, "%s enters grid[%u,%u]", obj->GetGuidStr().c_str(), cell.GridX(), cell.GridY());
 
     obj->GetViewPoint().Event_AddedToWorld(&(*grid)(cell.CellX(), cell.CellY()));
     obj->SetItsNewObject(true);
@@ -573,6 +582,8 @@ void Map::VisitNearbyCellsOf(WorldObject* obj, TypeContainerVisitor<MaNGOS::Obje
 
 void Map::Update(const uint32& t_diff)
 {
+    std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+
     m_dyn_tree.update(t_diff);
 
     /// update worldsessions for existing players
@@ -694,6 +705,18 @@ void Map::Update(const uint32& t_diff)
     if (i_data)
         i_data->Update(t_diff);
 
+    std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+    long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+    if (duration < m_updateTimeMin)
+        m_updateTimeMin = duration;
+
+    if (duration > m_updateTimeMax)
+        m_updateTimeMax = duration;
+
+    m_updateTimeTotal += duration;
+    ++m_cycleCounter;
+
     m_weatherSystem->UpdateWeathers(t_diff);
 }
 
@@ -764,7 +787,7 @@ Map::Remove(T* obj, bool remove)
     if (!loaded(GridPair(cell.data.Part.grid_x, cell.data.Part.grid_y)))
         return;
 
-    DEBUG_LOG("Remove object (GUID: %u TypeId:%u) from grid[%u,%u]", obj->GetGUIDLow(), obj->GetTypeId(), cell.data.Part.grid_x, cell.data.Part.grid_y);
+    DEBUG_FILTER_LOG(LOG_FILTER_CREATURE_MOVES, "Remove %s from grid[%u,%u]", obj->GetGuidStr().c_str(), cell.data.Part.grid_x, cell.data.Part.grid_y);
     NGridType* grid = getNGrid(cell.GridX(), cell.GridY());
     MANGOS_ASSERT(grid != nullptr);
 
@@ -883,7 +906,7 @@ bool Map::CreatureRespawnRelocation(Creature* c)
     CellPair resp_val = MaNGOS::ComputeCellPair(resp_x, resp_y);
     Cell resp_cell(resp_val);
 
-    c->CombatStop();
+    c->CombatStopWithPets();
     c->GetMotionMaster()->Clear();
 
     DEBUG_FILTER_LOG(LOG_FILTER_CREATURE_MOVES, "Creature (GUID: %u Entry: %u) will moved from grid[%u,%u]cell[%u,%u] to respawn grid[%u,%u]cell[%u,%u].", c->GetGUIDLow(), c->GetEntry(), c->GetCurrentCell().GridX(), c->GetCurrentCell().GridY(), c->GetCurrentCell().CellX(), c->GetCurrentCell().CellY(), resp_cell.GridX(), resp_cell.GridY(), resp_cell.CellX(), resp_cell.CellY());
@@ -2120,7 +2143,7 @@ bool Map::GetHitPosition(float srcX, float srcY, float srcZ, float& destX, float
     bool result0 = VMAP::VMapFactory::createOrGetVMapManager()->getObjectHitPos(GetId(), srcX, srcY, srcZ, destX, destY, destZ, tempX, tempY, tempZ, modifyDist);
     if (result0)
     {
-        DEBUG_LOG("Map::GetHitPosition vmaps corrects gained with static objects! new dest coords are X:%f Y:%f Z:%f", destX, destY, destZ);
+        //DEBUG_LOG("Map::GetHitPosition vmaps corrects gained with static objects! new dest coords are X:%f Y:%f Z:%f", destX, destY, destZ);
         destX = tempX;
         destY = tempY;
         destZ = tempZ;
@@ -2129,7 +2152,7 @@ bool Map::GetHitPosition(float srcX, float srcY, float srcZ, float& destX, float
     bool result1 = m_dyn_tree.getObjectHitPos(srcX, srcY, srcZ, destX, destY, destZ, tempX, tempY, tempZ, modifyDist);
     if (result1)
     {
-        DEBUG_LOG("Map::GetHitPosition vmaps corrects gained with dynamic objects! new dest coords are X:%f Y:%f Z:%f", destX, destY, destZ);
+        //DEBUG_LOG("Map::GetHitPosition vmaps corrects gained with dynamic objects! new dest coords are X:%f Y:%f Z:%f", destX, destY, destZ);
         destX = tempX;
         destY = tempY;
         destZ = tempZ;

@@ -252,7 +252,7 @@ pAuraHandler AuraHandler[TOTAL_AURAS] =
 
 static AuraType const frozenAuraTypes[] = { SPELL_AURA_MOD_ROOT, SPELL_AURA_MOD_STUN, SPELL_AURA_NONE };
 
-Aura::Aura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster, Item* castItem) :
+Aura::Aura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster, Item* castItem) :
     m_spellmod(nullptr), m_periodicTimer(0), m_periodicTick(0), m_removeMode(AURA_REMOVE_BY_DEFAULT),
     m_effIndex(eff), m_positive(false), m_isPeriodic(false), m_isAreaAura(false),
     m_isPersistent(false), m_magnetUsed(false), m_spellAuraHolder(holder)
@@ -265,13 +265,7 @@ Aura::Aura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBas
     m_positive = IsPositiveAuraEffect(spellproto, m_effIndex, caster, target);
     m_applyTime = time(nullptr);
 
-    int32 damage;
-    if (!caster)
-        damage = m_currentBasePoints;
-    else
-    {
-        damage = caster->CalculateSpellDamage(target, spellproto, m_effIndex, &m_currentBasePoints);
-    }
+    int32 damage = currentDamage ? *currentDamage : m_currentBasePoints;
 
     DEBUG_FILTER_LOG(LOG_FILTER_SPELL_CAST, "Aura: construct Spellid : %u, Aura : %u Target : %d Damage : %d", spellproto->Id, spellproto->EffectApplyAuraName[eff], spellproto->EffectImplicitTargetA[eff], damage);
 
@@ -291,9 +285,9 @@ Aura::~Aura()
 {
 }
 
-AreaAura::AreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target,
+AreaAura::AreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target,
                    Unit* caster, Item* castItem, uint32 originalRankSpellId)
-    : Aura(spellproto, eff, currentBasePoints, holder, target, caster, castItem), m_originalRankSpellId(originalRankSpellId)
+    : Aura(spellproto, eff, currentDamage, currentBasePoints, holder, target, caster, castItem), m_originalRankSpellId(originalRankSpellId)
 {
     m_isAreaAura = true;
 
@@ -327,8 +321,8 @@ AreaAura::~AreaAura()
 {
 }
 
-PersistentAreaAura::PersistentAreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target,
-                                       Unit* caster, Item* castItem) : Aura(spellproto, eff, currentBasePoints, holder, target, caster, castItem)
+PersistentAreaAura::PersistentAreaAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target,
+                                       Unit* caster, Item* castItem) : Aura(spellproto, eff, currentDamage, currentBasePoints, holder, target, caster, castItem)
 {
     m_isPersistent = true;
 }
@@ -337,8 +331,8 @@ PersistentAreaAura::~PersistentAreaAura()
 {
 }
 
-SingleEnemyTargetAura::SingleEnemyTargetAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target,
-        Unit* caster, Item* castItem) : Aura(spellproto, eff, currentBasePoints, holder, target, caster, castItem)
+SingleEnemyTargetAura::SingleEnemyTargetAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target,
+        Unit* caster, Item* castItem) : Aura(spellproto, eff, currentDamage, currentBasePoints, holder, target, caster, castItem)
 {
     if (caster)
         m_castersTargetGuid = caster->GetSelectionGuid();
@@ -353,12 +347,12 @@ Unit* SingleEnemyTargetAura::GetTriggerTarget() const
     return ObjectAccessor::GetUnit(*(m_spellAuraHolder->GetTarget()), m_castersTargetGuid);
 }
 
-Aura* CreateAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster, Item* castItem)
+Aura* CreateAura(SpellEntry const* spellproto, SpellEffectIndex eff, int32 const* currentDamage, int32 const* currentBasePoints, SpellAuraHolder* holder, Unit* target, Unit* caster, Item* castItem)
 {
     if (IsAreaAuraEffect(spellproto->Effect[eff]))
-        return new AreaAura(spellproto, eff, currentBasePoints, holder, target, caster, castItem);
+        return new AreaAura(spellproto, eff, currentDamage, currentBasePoints, holder, target, caster, castItem);
 
-    return new Aura(spellproto, eff, currentBasePoints, holder, target, caster, castItem);
+    return new Aura(spellproto, eff, currentDamage, currentBasePoints, holder, target, caster, castItem);
 }
 
 SpellAuraHolder* CreateSpellAuraHolder(SpellEntry const* spellproto, Unit* target, WorldObject* caster, Item* castItem /*= nullptr*/, SpellEntry const* triggeredBy /*= nullptr*/)
@@ -366,13 +360,13 @@ SpellAuraHolder* CreateSpellAuraHolder(SpellEntry const* spellproto, Unit* targe
     return new SpellAuraHolder(spellproto, target, caster, castItem, triggeredBy);
 }
 
-void Aura::SetModifier(AuraType t, int32 a, uint32 pt, int32 miscValue)
+void Aura::SetModifier(AuraType type, int32 amount, uint32 periodicTime, int32 miscValue)
 {
-    m_modifier.m_auraname = t;
-    m_modifier.m_amount = a;
-    m_modifier.m_baseAmount = a;
+    m_modifier.m_auraname = type;
+    m_modifier.m_amount = amount * GetStackAmount();
+    m_modifier.m_baseAmount = amount;
     m_modifier.m_miscvalue = miscValue;
-    m_modifier.periodictime = pt;
+    m_modifier.periodictime = periodicTime;
 }
 
 void Aura::Update(uint32 diff)
@@ -421,7 +415,7 @@ void AreaAura::Update(uint32 diff)
                             for (GroupReference* itr = pGroup->GetFirstMember(); itr != nullptr; itr = itr->next())
                             {
                                 Player* Target = itr->getSource();
-                                if (Target && Target->isAlive() && Target->GetSubGroup() == subgroup && caster->CanAssist(Target))
+                                if (Target && Target->isAlive() && Target->GetSubGroup() == subgroup && caster->CanAssistSpell(Target, GetSpellProto()))
                                 {
                                     if (caster->IsWithinDistInMap(Target, m_radius))
                                         targets.push_back(Target);
@@ -520,6 +514,7 @@ void AreaAura::Update(uint32 diff)
                     continue;
 
                 int32 actualBasePoints = m_currentBasePoints;
+                int32 actualDamage = m_modifier.m_baseAmount;
                 // recalculate basepoints for lower rank (all AreaAura spell not use custom basepoints?)
                 if (actualSpellInfo != GetSpellProto())
                     actualBasePoints = actualSpellInfo->CalculateSimpleValue(m_effIndex);
@@ -535,7 +530,7 @@ void AreaAura::Update(uint32 diff)
 
                 holder->SetAuraDuration(GetAuraDuration());
 
-                AreaAura* aur = new AreaAura(actualSpellInfo, m_effIndex, &actualBasePoints, holder, target, caster, nullptr, GetSpellProto()->Id);
+                AreaAura* aur = new AreaAura(actualSpellInfo, m_effIndex, &actualDamage, &actualBasePoints, holder, target, caster, nullptr, GetSpellProto()->Id);
                 holder->AddAura(aur, m_effIndex);
 
                 if (addedToExisting)
@@ -570,7 +565,7 @@ void AreaAura::Update(uint32 diff)
                 caster->hasUnitState(UNIT_STAT_ISOLATED)               ||
                 !caster->HasAura(originalRankSpellId, GetEffIndex())   ||
                 !caster->IsWithinDistInMap(target, m_radius)           ||
-                caster->CanAssist(target) != needFriendly
+                caster->CanAssistSpell(target, GetSpellProto()) != needFriendly
            )
         {
             target->RemoveSingleAuraFromSpellAuraHolder(GetId(), GetEffIndex(), GetCasterGuid());
@@ -744,7 +739,7 @@ void Aura::ReapplyAffectedPassiveAuras()
         case SPELLMOD_COOLDOWN:
         case SPELLMOD_COST:
         case SPELLMOD_ACTIVATION_TIME:
-        case SPELLMOD_CASTING_TIME_OLD:
+        case SPELLMOD_GLOBAL_COOLDOWN:
         case SPELLMOD_SPEED:
         case SPELLMOD_HASTE:
         case SPELLMOD_ATTACK_POWER:
@@ -1225,6 +1220,28 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
             {
                 switch (GetId())
                 {
+                    case 126:                               // Eye of Kilrogg
+                    {
+                        if (target->IsPlayer())
+                        {
+                            Unit* pet = static_cast<Player*>(target)->GetCharm();
+                            if (pet && pet->GetEntry() == 4277)
+                            {
+                                pet->CastSpell(pet, 2585, TRIGGERED_OLD_TRIGGERED);
+                            }
+                        }
+                        break;
+                    }
+                    case 11403:                             // Dream Vision
+                    {
+                        if (target->IsPlayer())
+                        {
+                            Unit* pet = static_cast<Player*>(target)->GetCharm();
+                            if (pet && pet->GetEntry() == 7863)
+                                pet->SetVisibility(VISIBILITY_OFF);
+                        }
+                        break;
+                    }
                     case 7057:                              // Haunting Spirits
                         // expected to tick with 30 sec period (tick part see in Aura::PeriodicTick)
                         m_isPeriodic = true;
@@ -1267,6 +1284,24 @@ void Aura::HandleAuraDummy(bool apply, bool Real)
                     {
                         if (target->HasAura(25040))
                             target->CastSpell(target, 25043, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, GetCaster()->GetObjectGuid());
+                        return;
+                    }
+                    case 26681:                             // Cologne
+                    {
+                        if (Unit* target = GetTarget())
+                        {
+                            if (target->HasAura(26682))
+                                target->RemoveAurasDueToSpell(26682);
+                        }
+                        return;
+                    }
+                    case 26682:                             // Perfume
+                    {
+                        if (Unit* target = GetTarget())
+                        {
+                            if (target->HasAura(26681))
+                                target->RemoveAurasDueToSpell(26681);
+                        }
                         return;
                     }
                     case 28832:                             // Mark of Korth'azz
@@ -4377,6 +4412,10 @@ void Aura::HandleSchoolAbsorb(bool apply, bool Real)
 void Aura::PeriodicTick()
 {
     Unit* target = GetTarget();
+    // passive periodic trigger spells should not be updated when dead, only death persistent should
+    if (!target->isAlive() && GetHolder()->IsPassive())
+        return;
+
     SpellEntry const* spellProto = GetSpellProto();
 
     switch (m_modifier.m_auraname)
@@ -4397,15 +4436,17 @@ void Aura::PeriodicTick()
                 return;
 
             // Check for immune (not use charges)
-            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+            if (!spellProto->HasAttribute(SPELL_ATTR_UNAFFECTED_BY_INVULNERABILITY)) // confirmed Impaling spine goes through immunity
             {
-                pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
-                return;
+                if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+                {
+                    pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
+                    return;
+                }
             }
 
             uint32 absorb = 0;
             int32 resist = 0;
-            CleanDamage cleanDamage =  CleanDamage(0, BASE_ATTACK, MELEE_HIT_NORMAL);
 
             // ignore non positive values (can be result apply spellmods to aura damage
             uint32 amount = (m_modifier.m_amount > 0 ? uint32(m_modifier.m_amount) : 0);
@@ -4461,6 +4502,7 @@ void Aura::PeriodicTick()
             if (pdamage)
                 procVictim |= PROC_FLAG_TAKEN_ANY_DAMAGE;
 
+            CleanDamage cleanDamage = CleanDamage(pdamage, BASE_ATTACK, MELEE_HIT_NORMAL);
             pCaster->DealDamage(target, pdamage, &cleanDamage, DOT, GetSpellSchoolMask(spellProto), spellProto, true);
 
             pCaster->ProcDamageAndSpell(ProcSystemArguments(target, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, BASE_ATTACK, spellProto));
@@ -4485,15 +4527,17 @@ void Aura::PeriodicTick()
                 return;
 
             // Check for immune
-            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+            if (!spellProto->HasAttribute(SPELL_ATTR_UNAFFECTED_BY_INVULNERABILITY))
             {
-                pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
-                return;
+                if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+                {
+                    pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
+                    return;
+                }
             }
 
             uint32 absorb = 0;
             int32 resist = 0;
-            CleanDamage cleanDamage =  CleanDamage(0, BASE_ATTACK, MELEE_HIT_NORMAL);
 
             uint32 pdamage = (m_modifier.m_amount > 0 ? uint32(m_modifier.m_amount) : 0);
 
@@ -4524,6 +4568,7 @@ void Aura::PeriodicTick()
             if (pdamage)
                 procVictim |= PROC_FLAG_TAKEN_ANY_DAMAGE;
 
+            CleanDamage cleanDamage = CleanDamage(pdamage, BASE_ATTACK, MELEE_HIT_NORMAL);
             int32 new_damage = pCaster->DealDamage(target, pdamage, &cleanDamage, DOT, GetSpellSchoolMask(spellProto), spellProto, false);
             pCaster->ProcDamageAndSpell(ProcSystemArguments(target, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, BASE_ATTACK, spellProto));
 
@@ -4563,7 +4608,7 @@ void Aura::PeriodicTick()
             if (target != pCaster && spellProto->SpellVisual == 163 && !pCaster->isAlive())
                 return;
 
-            if (target->IsImmuneToSchool(spellProto))
+            if (target->IsImmuneToSchool(spellProto, (1 << GetEffIndex())))
             {
                 pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
                 return;
@@ -4608,7 +4653,7 @@ void Aura::PeriodicTick()
                 if (pCaster->GetHealth() > damage)
                 {
                     pCaster->SendSpellNonMeleeDamageLog(pCaster, GetId(), damage, GetSpellSchoolMask(spellProto), absorb, 0, true, 0, false);
-                    CleanDamage cleanDamage = CleanDamage(0, BASE_ATTACK, MELEE_HIT_NORMAL);
+                    CleanDamage cleanDamage = CleanDamage(damage, BASE_ATTACK, MELEE_HIT_NORMAL);
                     pCaster->DealDamage(pCaster, damage, &cleanDamage, NODAMAGE, GetSpellSchoolMask(spellProto), spellProto, true);
                 }
                 else
@@ -4650,10 +4695,13 @@ void Aura::PeriodicTick()
                 return;
 
             // Check for immune (not use charges)
-            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+            if (!spellProto->HasAttribute(SPELL_ATTR_UNAFFECTED_BY_INVULNERABILITY)) // confirmed Impaling spine goes through immunity
             {
-                pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
-                return;
+                if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+                {
+                    pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
+                    return;
+                }
             }
 
             // ignore non positive values (can be result apply spellmods to aura damage
@@ -4710,7 +4758,7 @@ void Aura::PeriodicTick()
 
             if (pCaster)
             {
-                if (target->IsImmuneToSchool(spellProto))
+                if (target->IsImmuneToSchool(spellProto, (1 << GetEffIndex())))
                 {
                     pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
                     return;
@@ -4750,7 +4798,7 @@ void Aura::PeriodicTick()
 
             if (pCaster)
             {
-                if (target->IsImmuneToSchool(spellProto))
+                if (target->IsImmuneToSchool(spellProto, (1 << GetEffIndex())))
                 {
                     pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
                     return;
@@ -4788,10 +4836,13 @@ void Aura::PeriodicTick()
                 return;
 
             // Check for immune (not use charges)
-            if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+            if (!spellProto->HasAttribute(SPELL_ATTR_UNAFFECTED_BY_INVULNERABILITY)) // confirmed Impaling spine goes through immunity
             {
-                pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
-                return;
+                if (target->IsImmuneToDamage(GetSpellSchoolMask(spellProto)))
+                {
+                    pCaster->SendSpellOrDamageImmune(target, spellProto->Id);
+                    return;
+                }
             }
 
             int32 pdamage = m_modifier.m_amount > 0 ? m_modifier.m_amount : 0;
@@ -5611,6 +5662,11 @@ void SpellAuraHolder::SetAuraCharges(uint32 charges, bool update)
     if (m_procCharges == charges)
         return;
     m_procCharges = charges;
+
+    for (uint8 i = 0; i < MAX_EFFECT_INDEX; i++)
+        if (m_auras[i])
+            if (SpellModifier* spellMod = m_auras[i]->GetSpellModifier())
+                spellMod->charges = charges;
 
     if (update)
         UpdateAuraApplication();

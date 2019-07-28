@@ -552,6 +552,13 @@ void ObjectMgr::LoadCreatureTemplates()
             else
                 const_cast<CreatureInfo*>(cInfo)->Scale = DEFAULT_OBJECT_SCALE;
         }
+
+        if (cInfo->visibilityDistanceType >= VisibilityDistanceType::Max)
+        {
+            sLog.outErrorDb("sql.sql", "Creature (Entry: %u) has invalid visibilityDistanceType (%u) defined in `creature_template`.", cInfo->Entry, AsUnderlyingType(cInfo->visibilityDistanceType));
+            const_cast<CreatureInfo*>(cInfo)->visibilityDistanceType = VisibilityDistanceType::Normal;
+        }
+
     }
 
     sLog.outString(">> Loaded %u creature definitions", sCreatureStorage.GetRecordCount());
@@ -966,6 +973,53 @@ void ObjectMgr::LoadCreatureConditionalSpawn()
     sLog.outString();
 }
 
+void ObjectMgr::LoadCreatureSpawnEntry()
+{
+    mCreatureSpawnEntryMap.clear();
+
+    QueryResult* result = WorldDatabase.Query("SELECT guid, entry FROM creature_spawn_entry");
+
+    if (!result)
+    {
+        BarGoLink bar(1);
+        bar.step();
+        sLog.outErrorDb(">> Loaded creature_spawn_entry, table is empty!");
+        sLog.outString();
+        return;
+    }
+
+    BarGoLink bar(result->GetRowCount());
+
+    uint32 count = 0;
+
+    do
+    {
+        bar.step();
+
+        Field* fields = result->Fetch();
+
+        uint32 guid = fields[0].GetUInt32();
+        uint32 entry = fields[1].GetUInt32();
+
+        CreatureInfo const* cInfo = GetCreatureTemplate(entry);
+        if (!cInfo)
+        {
+            sLog.outErrorDb("Table `creature_spawn_entry` has creature (GUID: %u) with non existing creature entry %u, skipped.", guid, entry);
+            continue;
+        }
+
+        auto& entries = mCreatureSpawnEntryMap[guid];
+        entries.push_back(entry);
+
+        ++count;
+    } while (result->NextRow());
+
+    delete result;
+
+    sLog.outString(">> Loaded %u creature_spawn_entry entries", count);
+    sLog.outString();
+}
+
 void ObjectMgr::LoadCreatures()
 {
     uint32 count = 0;
@@ -1010,13 +1064,25 @@ void ObjectMgr::LoadCreatures()
             CreatureConditionalSpawn const* cSpawn = GetCreatureConditionalSpawn(guid);
             if (!cSpawn)
             {
-                sLog.outErrorDb("Table `creature` has creature (GUID: %u) with non existing link to creature dual spawn, skipped.", guid);
-                continue;
+                auto spawnEntriesMap = sObjectMgr.GetCreatureSpawnEntry();
+                auto itr = spawnEntriesMap.find(guid);
+                if (itr == spawnEntriesMap.end())
+                {
+                    sLog.outErrorDb("Table `creature` has creature (GUID: %u) with 0 id and no records in creature_conditional_spawn/creature_spawn_entry, skipped.", guid);
+                    continue;
+                }
+                else
+                {
+                    auto& spawnList = (*itr).second;
+                    entry = spawnList[irand(0, spawnList.size() - 1)];
+                }
             }
-
-            isConditional = true;
-            // set a default entry to validate the record; will be reset back to 0 afterwards
-            entry = cSpawn->EntryAlliance != 0 ? cSpawn->EntryAlliance : cSpawn->EntryHorde;
+            else
+            {
+                isConditional = true;
+                // set a default entry to validate the record; will be reset back to 0 afterwards
+                entry = cSpawn->EntryAlliance != 0 ? cSpawn->EntryAlliance : cSpawn->EntryHorde;
+            }
         }
 
         CreatureInfo const* cInfo = GetCreatureTemplate(entry);
@@ -3219,7 +3285,7 @@ void ObjectMgr::LoadGroups()
                 continue;
             }
 
-            DungeonPersistentState* state = (DungeonPersistentState*)sMapPersistentStateMgr.AddPersistentState(mapEntry, fields[2].GetUInt32(), (time_t)fields[4].GetUInt64(), (fields[5].GetUInt32() == 0), true, true, fields[7].GetUInt32());
+            DungeonPersistentState* state = (DungeonPersistentState*)sMapPersistentStateMgr.AddPersistentState(mapEntry, fields[2].GetUInt32(), (time_t)fields[4].GetUInt64(), (fields[5].GetUInt32() == 0), true, fields[7].GetUInt32());
             group->BindToInstance(state, fields[3].GetBool(), true);
         }
         while (result->NextRow());
@@ -3243,39 +3309,39 @@ void ObjectMgr::LoadQuests()
 
     m_ExclusiveQuestGroups.clear();
 
-    //                                                0      1       2           3         4           5     6                7              8              9
-    QueryResult* result = WorldDatabase.Query("SELECT entry, Method, ZoneOrSort, MinLevel, QuestLevel, Type, RequiredClasses, RequiredRaces, RequiredSkill, RequiredSkillValue,"
-                          //   10                   11                 12                     13                   14                     15                   16                17
+    //                                                0      1       2           3         4         5           6     7                8              9              10
+    QueryResult* result = WorldDatabase.Query("SELECT entry, Method, ZoneOrSort, MinLevel, MaxLevel, QuestLevel, Type, RequiredClasses, RequiredRaces, RequiredSkill, RequiredSkillValue,"
+                          //   11                   12                 13                     14                   15                     16                   17                18
                           "RepObjectiveFaction, RepObjectiveValue, RequiredMinRepFaction, RequiredMinRepValue, RequiredMaxRepFaction, RequiredMaxRepValue, SuggestedPlayers, LimitTime,"
-                          //   18          19            20           21           22              23                24         25            26
+                          //   19          20            21           22           23              24                25         26            27
                           "QuestFlags, SpecialFlags, PrevQuestId, NextQuestId, ExclusiveGroup, NextQuestInChain, SrcItemId, SrcItemCount, SrcSpell,"
-                          //   27     28       29          30               31                32       33              34              35              36
+                          //   28     29       30          31               32                33       34              35              36              37
                           "Title, Details, Objectives, OfferRewardText, RequestItemsText, EndText, ObjectiveText1, ObjectiveText2, ObjectiveText3, ObjectiveText4,"
-                          //   37          38          39          40          41             42             43             44
+                          //   38          39          40          41          42             43             44             45
                           "ReqItemId1, ReqItemId2, ReqItemId3, ReqItemId4, ReqItemCount1, ReqItemCount2, ReqItemCount3, ReqItemCount4,"
-                          //   45            46            47            48            49               50               51               52
+                          //   46            47            48            49            50               51               52               53
                           "ReqSourceId1, ReqSourceId2, ReqSourceId3, ReqSourceId4, ReqSourceCount1, ReqSourceCount2, ReqSourceCount3, ReqSourceCount4,"
-                          //   53                  54                  55                  56                  57                     58                     59                     60
+                          //   54                  55                  56                  57                  58                     59                     60                     60
                           "ReqCreatureOrGOId1, ReqCreatureOrGOId2, ReqCreatureOrGOId3, ReqCreatureOrGOId4, ReqCreatureOrGOCount1, ReqCreatureOrGOCount2, ReqCreatureOrGOCount3, ReqCreatureOrGOCount4,"
-                          //   61             62             63             64
+                          //   62             63             64             65
                           "ReqSpellCast1, ReqSpellCast2, ReqSpellCast3, ReqSpellCast4,"
-                          //   65                66                67                68                69                70
+                          //   66                67                68                69                70                71
                           "RewChoiceItemId1, RewChoiceItemId2, RewChoiceItemId3, RewChoiceItemId4, RewChoiceItemId5, RewChoiceItemId6,"
-                          //   71                   72                   73                   74                   75                   76
+                          //   72                   73                   74                   75                   76                   77
                           "RewChoiceItemCount1, RewChoiceItemCount2, RewChoiceItemCount3, RewChoiceItemCount4, RewChoiceItemCount5, RewChoiceItemCount6,"
-                          //   77          78          79          80          81             82             83             84
+                          //   78          79          80          81          82             83             84             85
                           "RewItemId1, RewItemId2, RewItemId3, RewItemId4, RewItemCount1, RewItemCount2, RewItemCount3, RewItemCount4,"
-                          //   85              86              87              88              89              90            91            92            93            94
+                          //   86              87              88              89              90              91            92            93            94            95
                           "RewRepFaction1, RewRepFaction2, RewRepFaction3, RewRepFaction4, RewRepFaction5, RewRepValue1, RewRepValue2, RewRepValue3, RewRepValue4, RewRepValue5,"
-                          //   95             96                97        98            99                 100               101         102     103     104
+                          //   96             97                98        99            100                101               102       103     104     105
                           "RewOrReqMoney, RewMoneyMaxLevel, RewSpell, RewSpellCast, RewMailTemplateId, RewMailDelaySecs, PointMapId, PointX, PointY, PointOpt,"
-                          //   105            106            107            108            109                 110                 111                 112
+                          //   106            107            108            109            110                 111                 112                 113
                           "DetailsEmote1, DetailsEmote2, DetailsEmote3, DetailsEmote4, DetailsEmoteDelay1, DetailsEmoteDelay2, DetailsEmoteDelay3, DetailsEmoteDelay4,"
-                          //   113              114            115                116                117                118
-                          "IncompleteEmote, CompleteEmote, OfferRewardEmote1, OfferRewardEmote2, OfferRewardEmote3, OfferRewardEmote4,"
-                          //   119                     120                     121                     122
+                          //   114          115                   116            117                  118                119                120                121
+                          "IncompleteEmote, IncompleteEmoteDelay, CompleteEmote, CompleteEmoteDelay,  OfferRewardEmote1, OfferRewardEmote2, OfferRewardEmote3, OfferRewardEmote4,"
+                          //   122                 123                     124                     125
                           "OfferRewardEmoteDelay1, OfferRewardEmoteDelay2, OfferRewardEmoteDelay3, OfferRewardEmoteDelay4,"
-                          //   123          124          125
+                          //   126      127             128
                           "StartScript, CompleteScript, RequiredCondition"
                           " FROM quest_template");
     if (!result)
@@ -4431,7 +4497,7 @@ void ObjectMgr::LoadInstanceTemplate()
             MapEntry const* ghostEntry = sMapStore.LookupEntry(temp->ghostEntranceMap);
             if (!ghostEntry)
             {
-                sLog.outErrorDb("ObjectMgr::LoadInstanceTemplate: bad ghost entrance map id %u for instance template %d template!", ghostEntry->MapID, temp->map);
+                sLog.outErrorDb("ObjectMgr::LoadInstanceTemplate: bad ghost entrance map id %u for instance template %d template!", temp->ghostEntranceMap, temp->map);
                 sInstanceTemplate.EraseEntry(i);
                 continue;
             }
@@ -5064,7 +5130,7 @@ void ObjectMgr::ReturnOrDeleteOldMails(bool serverUp)
             {
                 // mail will be returned:
                 CharacterDatabase.PExecute("UPDATE mail SET sender = '%u', receiver = '%u', expire_time = '" UI64FMTD "', deliver_time = '" UI64FMTD "',cod = '0', checked = '%u' WHERE id = '%u'",
-                                           m->receiverGuid.GetCounter(), m->sender, (uint64)(basetime + 30 * DAY), (uint64)basetime, MAIL_CHECK_MASK_RETURNED, m->messageID);
+                                           m->receiverGuid.GetCounter(), m->sender, (uint64)basetime + 30 * DAY, (uint64)basetime, MAIL_CHECK_MASK_RETURNED, m->messageID);
                 for (MailItemInfoVec::iterator itr2 = m->items.begin(); itr2 != m->items.end(); ++itr2)
                 {
                     // update receiver in mail items for its proper delivery, and in instance_item for avoid lost item at sender delete
@@ -6814,16 +6880,14 @@ void ObjectMgr::CheckSpellCones()
             if (uint32 firstRankId = sSpellMgr.GetFirstSpellInChain(i))
             {
                 SpellCone const* spellConeFirst = sSpellCones.LookupEntry<SpellCone>(firstRankId);
-                if ((!spellConeFirst && !spellCone) || !spellCone)
+                if (!spellConeFirst && !spellCone) // no cones for either - is fine
+                    continue;
+
+                if (!spellCone && spellConeFirst) // cone for first - is fine
                     continue;
 
                 if (!spellConeFirst && spellCone)
-                {
-                    if (spellCone)
-                        sLog.outErrorDb("Table spell_cone is missing entry for spell %u - angle %d for its first rank %u. But has cone for this one.", i, spellCone->coneAngle, firstRankId);
-                    else
-                        sLog.outErrorDb("Table spell_cone is missing entry for spell %u for its first rank %u, no cone even for this rank.", i, firstRankId);
-                }
+                    sLog.outErrorDb("Table spell_cone is missing entry for spell %u - angle %d for its first rank %u. But has cone for this one.", i, spellCone->coneAngle, firstRankId);
                 else if (spellCone->coneAngle != spellConeFirst->coneAngle)
                     sLog.outErrorDb("Table spell_cone has different cone angle for spell Id %u - angle %d and first rank %u - angle %d", i, spellCone->coneAngle, firstRankId, spellConeFirst->coneAngle);
             }
@@ -7824,6 +7888,10 @@ bool PlayerCondition::Meets(Player const* player, Map const* map, WorldObject co
         }
         case CONDITION_SPAWN_COUNT:
             return source->GetMap()->SpawnedCountForEntry(m_value1) >= m_value2;
+        case CONDITION_WORLD_SCRIPT:
+            return false; // Not yet implemented in Classic core but may be needed in the future. Kept for compatibility with TBC/WotLK cores where it was added with World State implementation
+        case CONDITION_GENDER_NPC:
+            return ((Creature*)source)->getGender() == m_value1;
         default:
             return false;
     }
@@ -8267,6 +8335,17 @@ bool PlayerCondition::IsValid(uint16 entry, ConditionType condition, uint32 valu
             if (!sCreatureStorage.LookupEntry<CreatureInfo>(value1))
             {
                 sLog.outErrorDb("Spawn count condition (entry %u, type %u) has an invalid value in value1. (Creature %u does not exist in the database), skipping.", entry, condition, value1);
+                return false;
+            }
+            break;
+        }
+        case CONDITION_WORLD_SCRIPT:
+            break;
+        case CONDITION_GENDER_NPC:
+        {
+            if (value1 >= MAX_GENDER)
+            {
+                sLog.outErrorDb("Gender condition (entry %u, type %u) has an invalid value in value1. (Has %u, must be smaller than %u), skipping.", entry, condition, value1, MAX_GENDER);
                 return false;
             }
             break;
@@ -9428,6 +9507,45 @@ void ObjectMgr::LoadCreatureTemplateSpells()
     }
 
     sLog.outString(">> Loaded %u creature_template_spells definitions", sCreatureTemplateSpellsStorage.GetRecordCount());
+    sLog.outString();
+}
+
+void ObjectMgr::LoadCreatureCooldowns()
+{
+    uint32 count = 0;
+    QueryResult* result = WorldDatabase.Query("SELECT Entry, SpellId, CooldownMin, CooldownMax FROM creature_cooldowns");
+
+    if (result)
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+
+            uint32 entry = fields[0].GetUInt32();
+            if (!sCreatureStorage.LookupEntry<CreatureInfo>(entry))
+            {
+                sLog.outErrorDb("LoadCreatureCooldowns: Entry %u does not exist.", entry);
+                continue;
+            }
+            uint32 spellId = fields[1].GetUInt32();
+            if (!sSpellTemplate.LookupEntry<SpellEntry>(spellId))
+            {
+                sLog.outErrorDb("LoadCreatureCooldowns: SpellId %u does not exist.", spellId);
+                continue;
+            }
+            uint32 cooldownMin = fields[2].GetUInt32();
+            uint32 cooldownMax = fields[3].GetUInt32();
+            if (cooldownMin == 0 && cooldownMax == 0)
+            {
+                sLog.outErrorDb("LoadCreatureCooldowns: Cooldowns are both 0 for entry %u spellId %u - redundant entry.", entry, spellId);
+                continue;
+            }
+            m_creatureCooldownMap[entry].emplace(spellId, std::make_pair(cooldownMin, cooldownMax));
+        } while (result->NextRow());
+    }
+    delete result;
+
+    sLog.outString(">> Loaded %u creature_cooldowns definitions", count);
     sLog.outString();
 }
 

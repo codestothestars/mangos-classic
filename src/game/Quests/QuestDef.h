@@ -191,6 +191,7 @@ class Quest
         uint32 GetQuestMethod() const { return QuestMethod; }
         int32  GetZoneOrSort() const { return ZoneOrSort; }
         uint32 GetMinLevel() const { return MinLevel; }
+        uint32 GetMaxLevel() const { return MaxLevel; }
         uint32 GetQuestLevel() const { return QuestLevel; }
         uint32 GetType() const { return Type; }
         uint32 GetRequiredClasses() const { return RequiredClasses; }
@@ -232,7 +233,9 @@ class Quest
         float  GetPointY() const { return PointY; }
         uint32 GetPointOpt() const { return PointOpt; }
         uint32 GetIncompleteEmote() const { return IncompleteEmote; }
+        uint32 GetIncompleteEmoteDelay() const { return IncompleteEmoteDelay; }
         uint32 GetCompleteEmote() const { return CompleteEmote; }
+        uint32 GetCompleteEmoteDelay() const { return CompleteEmoteDelay; }
         uint32 GetDetailsEmoteCount() const { return m_detailsemotecount; }
         uint32 GetQuestStartScript() const { return QuestStartScript; }
         uint32 GetQuestCompleteScript() const { return QuestCompleteScript; }
@@ -291,6 +294,7 @@ class Quest
         uint32 QuestMethod;
         int32  ZoneOrSort;
         uint32 MinLevel;
+        uint32 MaxLevel;
         uint32 QuestLevel;
         uint32 Type;
         uint32 RequiredClasses;
@@ -332,7 +336,9 @@ class Quest
         float  PointY;
         uint32 PointOpt;
         uint32 IncompleteEmote;
+        uint32 IncompleteEmoteDelay;
         uint32 CompleteEmote;
+        uint32 CompleteEmoteDelay;
         uint32 QuestStartScript;
         uint32 QuestCompleteScript;
 };

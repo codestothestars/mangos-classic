@@ -23,7 +23,7 @@ DROP TABLE IF EXISTS `db_version`;
 CREATE TABLE `db_version` (
   `version` varchar(120) DEFAULT NULL,
   `creature_ai_version` varchar(120) DEFAULT NULL,
-  `required_z2735_01_mangos_weapon_skills_fix_vanilla` bit(1) DEFAULT NULL
+  `required_z2742_01_mangos_visibility` bit(1) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Used DB version notes';
 
 --
@@ -903,6 +903,26 @@ LOCK TABLES `creature_conditional_spawn` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `creature_spawn_entry`
+--
+
+DROP TABLE IF EXISTS `creature_spawn_entry`;
+CREATE TABLE `creature_spawn_entry` (
+  `guid` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'Global Unique Identifier',
+  `entry` mediumint(8) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`guid`,`entry`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Creature System (Spawn Entry)';
+
+--
+-- Dumping data for table `creature_spawn_entry`
+--
+
+LOCK TABLES `creature_spawn_entry` WRITE;
+/*!40000 ALTER TABLE `creature_spawn_entry` DISABLE KEYS */;
+/*!40000 ALTER TABLE `creature_spawn_entry` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `creature_equip_template`
 --
 
@@ -1243,6 +1263,7 @@ CREATE TABLE `creature_template` (
   `GossipMenuId` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `EquipmentTemplateId` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `Civilian` tinyint(3) unsigned NOT NULL DEFAULT '0',
+  `VisibilityDistanceType` TINYINT NOT NULL DEFAULT '0',
   `AIName` char(64) NOT NULL DEFAULT '',
   `ScriptName` char(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`entry`)
@@ -1311,6 +1332,15 @@ LOCK TABLES `creature_template_spells` WRITE;
 /*!40000 ALTER TABLE `creature_template_spells` DISABLE KEYS */;
 /*!40000 ALTER TABLE `creature_template_spells` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS creature_cooldowns;
+CREATE TABLE creature_cooldowns (
+  `Entry` mediumint(8) unsigned NOT NULL,
+  `SpellId` int(11) unsigned NOT NULL,
+  `CooldownMin` int(10) unsigned NOT NULL,
+  `CooldownMax` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`entry`, `SpellId`)
+);
 
 --
 -- Dumping data for table `custom_texts`
@@ -3700,8 +3730,8 @@ INSERT INTO `mangos_string` VALUES
 (529,'   Waypoint',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (530,'   Animal random',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (531,'   Confused',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-(532,'   Targeted to player %s (lowguid %u) distance %f angle %f',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
-(533,'   Targeted to creature %s (lowguid %u) distance %f angle %f',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
+(532,'   Targeted to player %s (lowguid %u) distance %f angle %f mode %s',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
+(533,'   Targeted to creature %s (lowguid %u) distance %f angle %f mode %s',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (534,'   Targeted to <NULL>',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (535,'   Home movement to (X:%f Y:%f Z:%f)',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
 (536,'   Home movement used for player?!?',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),
@@ -9856,6 +9886,7 @@ CREATE TABLE `quest_template` (
   `Method` tinyint(3) unsigned NOT NULL DEFAULT '2',
   `ZoneOrSort` smallint(6) NOT NULL DEFAULT '0',
   `MinLevel` tinyint(3) unsigned NOT NULL DEFAULT '0',
+  `MaxLevel` tinyint(3) unsigned NOT NULL DEFAULT '255',
   `QuestLevel` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `Type` smallint(5) unsigned NOT NULL DEFAULT '0',
   `RequiredClasses` smallint(5) unsigned NOT NULL DEFAULT '0',

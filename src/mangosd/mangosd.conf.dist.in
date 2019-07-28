@@ -3,7 +3,7 @@
 #####################################
 
 [MangosdConf]
-ConfVersion=2019020601
+ConfVersion=2019061401
 
 ###################################################################################################################
 # CONNECTIONS AND DIRECTORIES
@@ -303,6 +303,7 @@ MaxWhoListReturns = 49
 #    LogFilter_Pathfinding
 #    LogFilter_MapsLoading
 #    LogFilter_EventAiDev
+#    LogFilter_DbScriptDev
 #        Log filters (active by default - meaning: the filter is active, hence the log is not displayed)
 #        Default: 1 - not include with any log level
 #                 0 - include in log if log level permit
@@ -397,6 +398,7 @@ LogFilter_DbStrictedCheck = 1
 LogFilter_Pathfinding = 1
 LogFilter_MapsLoading = 1
 LogFilter_EventAiDev = 1
+LogFilter_DbScriptDev = 1
 LogFilter_PeriodicAffects = 0
 LogFilter_PlayerMoves = 1
 LogFilter_SQLText = 1
@@ -814,8 +816,14 @@ PlayerCommands = 1
 #    AllowTwoSide.Interaction.Trade
 #    AllowTwoSide.Interaction.Auction
 #    AllowTwoSide.Interaction.Mail
-#        Allow or not common :chat(say,yell);channel(chat)group(join)guild(join);trade with different team,
-#        merge all auction houses for players from different teams, send mail to different team.
+#        Allow or disallow players from different teams to:
+#        - chat with each other (say, yell);
+#        - have merged chat channels;
+#        - join each other's groups;
+#        - join each other's guilds;
+#        - trade with each other when not in group;
+#        - have merged auction house listings;
+#        - send in-game mail;
 #        Default: 0 (Not allowed)
 #                 1 (Allowed)
 #
@@ -1151,24 +1159,9 @@ GM.InvisibleAura         = 31748
 #    Visibility.Distance.Instances
 #    Visibility.Distance.BG
 #        Visibility distance for different ingame object in different maps.
-#        Visibility on continents on offy ~90 yards. In BG ~180. For instances default ~120.
-#        Max limited by active player zone: ~ 333
+#        Visibility on continents on offy 100 yards. In BG/Arenas 533. For instances default 170.
+#        Max limited by active player zone: 533
 #        Min limit is max aggro radius (45) * Rate.Creature.Aggro
-#
-#    Visibility.Distance.InFlight
-#        Visible distance for player in flight
-#        Min limit is 0 (not show any objects)
-#
-#    Visibility.Distance.Grey.Unit
-#        Visibility grey distance for creatures/players (fast changing objects)
-#        addition to appropriate object type Visibility.Distance.* use in case visibility removing to
-#        object (except corpse around distances) If D is distance and G is grey distance then object
-#        make visible if distance to it <= D but make non visible if distance > D+G
-#        Default: 1 (yard)
-#
-#    Visibility.Distance.Grey.Object
-#        Visibility grey distance for dynobjects/gameobjects/corpses/creature bodies
-#        Default: 10 (yards)
 #
 #    Visibility.RelocationLowerLimit
 #        Object's visibility update called, when distance between current object's position and position,
@@ -1184,12 +1177,9 @@ GM.InvisibleAura         = 31748
 Visibility.FogOfWar.Stealth = 0
 Visibility.FogOfWar.Health  = 0
 Visibility.FogOfWar.Stats   = 0
-Visibility.Distance.Continents    = 90
-Visibility.Distance.Instances     = 120
-Visibility.Distance.BG            = 180
-Visibility.Distance.InFlight      = 100
-Visibility.Distance.Grey.Unit   = 1
-Visibility.Distance.Grey.Object = 10
+Visibility.Distance.Continents    = 100
+Visibility.Distance.Instances     = 170
+Visibility.Distance.BGArenas      = 533
 Visibility.RelocationLowerLimit    = 10
 Visibility.AIRelocationNotifyDelay = 1000
 

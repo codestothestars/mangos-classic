@@ -49,8 +49,8 @@ enum SpellInterruptFlags
 {
     SPELL_INTERRUPT_FLAG_MOVEMENT     = 0x01,
     SPELL_INTERRUPT_FLAG_DAMAGE       = 0x02,
-    SPELL_INTERRUPT_FLAG_INTERRUPT    = 0x04,
-    SPELL_INTERRUPT_FLAG_AUTOATTACK   = 0x08,
+    SPELL_INTERRUPT_FLAG_UNK3         = 0x04,
+    SPELL_INTERRUPT_FLAG_INTERRUPT    = 0x08,
     SPELL_INTERRUPT_FLAG_ABORT_ON_DMG = 0x10,               // _complete_ interrupt on direct damage
     // SPELL_INTERRUPT_UNK             = 0x20               // unk, 564 of 727 spells having this spell start with "Glyph"
 };
@@ -108,35 +108,37 @@ enum SpellPartialResist
 
 enum SpellModOp
 {
-    SPELLMOD_DAMAGE                 = 0,
-    SPELLMOD_DURATION               = 1,
-    SPELLMOD_THREAT                 = 2,
-    SPELLMOD_ATTACK_POWER           = 3,
-    SPELLMOD_CHARGES                = 4,
-    SPELLMOD_RANGE                  = 5,
-    SPELLMOD_RADIUS                 = 6,
-    SPELLMOD_CRITICAL_CHANCE        = 7,
-    SPELLMOD_ALL_EFFECTS            = 8,
-    SPELLMOD_NOT_LOSE_CASTING_TIME  = 9,
-    SPELLMOD_CASTING_TIME           = 10,
-    SPELLMOD_COOLDOWN               = 11,
-    SPELLMOD_SPEED                  = 12,
-    SPELLMOD_COST                   = 14,
-    SPELLMOD_CRIT_DAMAGE_BONUS      = 15,
-    SPELLMOD_RESIST_MISS_CHANCE     = 16,
-    SPELLMOD_JUMP_TARGETS           = 17,
-    SPELLMOD_CHANCE_OF_SUCCESS      = 18,                   // Only used with SPELL_AURA_ADD_FLAT_MODIFIER and affects proc spells
-    SPELLMOD_ACTIVATION_TIME        = 19,
-    SPELLMOD_EFFECT_PAST_FIRST      = 20,
-    SPELLMOD_CASTING_TIME_OLD       = 21,
-    SPELLMOD_DOT                    = 22,
-    SPELLMOD_HASTE                  = 23,
-    SPELLMOD_SPELL_BONUS_DAMAGE     = 24,
-    SPELLMOD_MULTIPLE_VALUE         = 27,
-    SPELLMOD_RESIST_DISPEL_CHANCE   = 28
+    SPELLMOD_DAMAGE                     = 0,
+    SPELLMOD_DURATION                   = 1,
+    SPELLMOD_THREAT                     = 2,
+    SPELLMOD_ATTACK_POWER               = 3,
+    SPELLMOD_CHARGES                    = 4,
+    SPELLMOD_RANGE                      = 5,
+    SPELLMOD_RADIUS                     = 6,
+    SPELLMOD_CRITICAL_CHANCE            = 7,
+    SPELLMOD_ALL_EFFECTS                = 8,
+    SPELLMOD_NOT_LOSE_CASTING_TIME      = 9,
+    SPELLMOD_CASTING_TIME               = 10,
+    SPELLMOD_COOLDOWN                   = 11,
+    SPELLMOD_SPEED                      = 12,
+    SPELLMOD_UNK1                       = 13, // unused
+    SPELLMOD_COST                       = 14,
+    SPELLMOD_CRIT_DAMAGE_BONUS          = 15,
+    SPELLMOD_RESIST_MISS_CHANCE         = 16,
+    SPELLMOD_JUMP_TARGETS               = 17,
+    SPELLMOD_CHANCE_OF_SUCCESS          = 18, // Only used with SPELL_AURA_ADD_FLAT_MODIFIER and affects proc spells
+    SPELLMOD_ACTIVATION_TIME            = 19,
+    SPELLMOD_EFFECT_PAST_FIRST          = 20,
+    SPELLMOD_GLOBAL_COOLDOWN            = 21,
+    SPELLMOD_DOT                        = 22,
+    SPELLMOD_HASTE                      = 23,
+    SPELLMOD_SPELL_BONUS_DAMAGE         = 24,
+    SPELLMOD_UNK2                       = 25, // unused
+    // SPELLMOD_FREQUENCY_OF_SUCCESS    = 26,                // not used in 2.4.3
+    SPELLMOD_MULTIPLE_VALUE             = 27,
+    SPELLMOD_RESIST_DISPEL_CHANCE       = 28,
+    MAX_SPELLMOD                        = 32,
 };
-
-#define MAX_SPELLMOD 32
 
 enum SpellFacingFlags
 {
@@ -581,7 +583,9 @@ enum MovementFlags
     MOVEFLAG_ROOT               = 0x08000000,               // used for flight paths
     MOVEFLAG_WATERWALKING       = 0x10000000,               // prevent unit from falling through water
     MOVEFLAG_SAFE_FALL          = 0x20000000,               // active rogue safe fall spell (passive)
-    MOVEFLAG_HOVER              = 0x40000000
+    MOVEFLAG_HOVER              = 0x40000000,
+
+    MOVEFLAG_MASK_MOVING_FORWARD = MOVEFLAG_FORWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT | MOVEFLAG_FALLING,
 };
 
 // flags that use in movement check for example at spell casting
@@ -788,7 +792,7 @@ struct CleanDamage
     CleanDamage(uint32 _damage, WeaponAttackType _attackType, MeleeHitOutcome _hitOutCome) :
         damage(_damage), attackType(_attackType), hitOutCome(_hitOutCome) {}
 
-    uint32 damage;
+    uint32 damage; // only used for rage generation
     WeaponAttackType attackType;
     MeleeHitOutcome hitOutCome;
 };
@@ -1357,7 +1361,7 @@ class Unit : public WorldObject
 
         Unit* getVictim() const { return m_attacking; }     //< Returns the victim that this unit is currently attacking
         void CombatStop(bool includingCast = false, bool includingCombo = true);        //< Stop this unit from combat, if includingCast==true, also interrupt casting
-        void CombatStopWithPets(bool includingCast = false);
+        void CombatStopWithPets(bool includingCast = false, bool includingCombo = true);
         void StopAttackFaction(uint32 faction_id);
         Unit* SelectRandomUnfriendlyTarget(Unit* except = nullptr, float radius = ATTACK_DISTANCE) const;
         Unit* SelectRandomFriendlyTarget(Unit* except = nullptr, float radius = ATTACK_DISTANCE) const;
@@ -1433,6 +1437,8 @@ class Unit : public WorldObject
             return false;
         }
 
+        Player const* GetControllingPlayer(bool ignoreCharms = false) const;
+
         ReputationRank GetReactionTo(Unit const* unit) const override;
         ReputationRank GetReactionTo(Corpse const* corpse) const override;
 
@@ -1453,8 +1459,15 @@ class Unit : public WorldObject
 
         bool IsCivilianForTarget(Unit const* pov) const;
 
-        bool IsInGroup(Unit const* other, bool party = false, bool UI = false) const;
-        bool IsInParty(Unit const* other, bool UI = false) const { return IsInGroup(other, true, UI); }
+        // Serverside fog of war settings
+        bool IsFogOfWarVisibleStealth(Unit const* other) const;
+        bool IsFogOfWarVisibleHealth(Unit const* other) const;
+        bool IsFogOfWarVisibleStats(Unit const* other) const;
+
+        bool IsInGroup(Unit const* other, bool party = false, bool ignoreCharms = false) const;
+        inline bool IsInParty(Unit const* other, bool ignoreCharms = false) const { return IsInGroup(other, true, ignoreCharms); }
+        bool IsInGuild(Unit const* other, bool ignoreCharms = false) const;
+        bool IsInTeam(Unit const* other, bool ignoreCharms = true) const;
 
         // extensions of CanAttack and CanAssist API needed serverside
         virtual bool CanAttackSpell(Unit const* target, SpellEntry const* spellInfo = nullptr, bool isAOE = false) const override;
@@ -1462,11 +1475,6 @@ class Unit : public WorldObject
 
         bool CanAttackOnSight(Unit const* target) const; // Used in MoveInLineOfSight checks
         bool CanAssistInCombatAgainst(Unit const* who, Unit const* enemy) const;
-
-        // Serverside fog of war settings
-        bool IsFogOfWarVisibleStealth(Unit const* other) const;
-        bool IsFogOfWarVisibleHealth(Unit const* other) const;
-        bool IsFogOfWarVisibleStats(Unit const* other) const;
 
         bool IsImmuneToNPC() const { return HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IMMUNE_TO_NPC); }
         void SetImmuneToNPC(bool state);
@@ -1490,7 +1498,7 @@ class Unit : public WorldObject
         bool IsSitState() const;
         bool IsStandState() const;
         bool IsSeatedState() const;
-        void SetStandState(uint8 state);
+        void SetStandState(uint8 state, bool acknowledge = false);
 
         bool IsMounted() const { return !!GetMountID(); }
         uint32 GetMountID() const { return GetUInt32Value(UNIT_FIELD_MOUNTDISPLAYID); }
@@ -1544,7 +1552,7 @@ class Unit : public WorldObject
         void SetCanParry(const bool flag);
         void SetCanBlock(const bool flag);
 
-        bool CanReactInCombat() const { return (isAlive() && !IsIncapacitated()); }
+        bool CanReactInCombat() const { return (isAlive() && !IsIncapacitated() && !IsEvadingHome()); }
         bool CanDodgeInCombat() const;
         bool CanDodgeInCombat(const Unit* attacker) const;
         bool CanParryInCombat() const;
@@ -1700,6 +1708,7 @@ class Unit : public WorldObject
         bool isFrozen() const;
 
         virtual bool IsInWater() const;
+        bool IsInSwimmableWater() const;
         virtual bool IsUnderwater() const;
         bool isInAccessablePlaceFor(Unit const* unit) const;
 
@@ -1755,7 +1764,10 @@ class Unit : public WorldObject
         void SendSpellNonMeleeDamageLog(Unit* target, uint32 spellID, uint32 damage, SpellSchoolMask damageSchoolMask, uint32 absorbedDamage, int32 resist, bool isPeriodic, uint32 blocked, bool criticalHit = false, bool split = false);
         void SendPeriodicAuraLog(SpellPeriodicAuraLogInfo* pInfo) const;
         void SendSpellMiss(Unit* target, uint32 spellID, SpellMissInfo missInfo) const;
+        void SendSpellDamageResist(Unit* target, uint32 spellId) const;
         void SendSpellOrDamageImmune(Unit* target, uint32 spellID) const;
+
+        void SendEnchantmentLog(ObjectGuid targetGuid, uint32 itemEntry, uint32 enchantId) const;
 
         void CasterHitTargetWithSpell(Unit* realCaster, Unit* target, SpellEntry const* spellInfo, bool success = true);
         bool CanInitiateAttack() const;
@@ -1767,6 +1779,7 @@ class Unit : public WorldObject
         void SendHeartBeat();
 
         bool IsMoving() const { return m_movementInfo.HasMovementFlag(movementFlagsMask); }
+        bool IsMovingForward() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_MASK_MOVING_FORWARD); }
         bool IsLevitating() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_LEVITATING); }
         bool IsWalking() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_WALK_MODE); }
         bool IsRooted() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_ROOT); }
@@ -1834,8 +1847,6 @@ class Unit : public WorldObject
         // Beneficiary: owner of the xp/loot/etc credit, master or self (server-side)
         Unit* GetBeneficiary() const;
         Player* GetBeneficiaryPlayer() const;
-        // Controlling player: official client PoV and term on which player is the "master" of the unit at the moment, limited recursive master/beneficiary logic (client-side)
-        Player const* GetControllingPlayer() const;
 
         // Client controlled: check if unit currently is under client control (has active "mover"), optionally check for specific client (server-side)
         bool IsClientControlled(Player const* exactClient = nullptr) const;
@@ -1882,8 +1893,7 @@ class Unit : public WorldObject
         // removing specific aura stacks by diff reasons and selections
         void RemoveAurasDueToSpell(uint32 spellId, SpellAuraHolder* except = nullptr, AuraRemoveMode mode = AURA_REMOVE_BY_DEFAULT);
         void RemoveAurasDueToItemSpell(Item* castItem, uint32 spellId);
-        void RemoveAurasByCasterSpell(uint32 spellId, ObjectGuid casterGuid);
-        void RemoveAurasDueToSpellBySteal(uint32 spellId, ObjectGuid casterGuid, Unit* stealer);
+        void RemoveAurasByCasterSpell(uint32 spellId, ObjectGuid casterGuid, AuraRemoveMode mode = AURA_REMOVE_BY_DEFAULT);
         void RemoveAurasDueToSpellByCancel(uint32 spellId);
         void RemoveAurasTriggeredBySpell(uint32 spellId, ObjectGuid casterGuid = ObjectGuid());
         void RemoveAuraStack(uint32 spellId);
@@ -1932,7 +1942,7 @@ class Unit : public WorldObject
         // set withDelayed to true to account delayed spells as casted
         // delayed+channeled spells are always accounted as casted
         // we can skip channeled or delayed checks using flags
-        bool IsNonMeleeSpellCasted(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false) const;
+        bool IsNonMeleeSpellCasted(bool withDelayed, bool skipChanneled = false, bool skipAutorepeat = false, bool forMovement = false) const;
 
         // set withDelayed to true to interrupt delayed spells too
         // delayed+channeled spells are always interrupted
@@ -2123,7 +2133,7 @@ class Unit : public WorldObject
         void ModifyAuraState(AuraState flag, bool apply);
         bool HasAuraState(AuraState flag) const { return HasFlag(UNIT_FIELD_AURASTATE, 1 << (flag - 1)); }
         void UnsummonAllTotems() const;
-        Unit* SelectMagnetTarget(Unit* victim, Spell* spell = nullptr, SpellEffectIndex eff = EFFECT_INDEX_0);
+        Unit* SelectMagnetTarget(Unit* victim, Spell* spell = nullptr);
 
         int32 SpellBonusWithCoeffs(SpellEntry const* spellProto, int32 total, int32 benefit, int32 ap_benefit, DamageEffectType damagetype, bool donePart);
         int32 SpellBaseDamageBonusDone(SpellSchoolMask schoolMask);
@@ -2176,7 +2186,7 @@ class Unit : public WorldObject
         virtual bool IsImmuneToSpell(SpellEntry const* spellInfo, bool castOnSelf, uint8 effectMask);
         virtual bool IsImmuneToDamage(SpellSchoolMask meleeSchoolMask);
         virtual bool IsImmuneToSpellEffect(SpellEntry const* spellInfo, SpellEffectIndex index, bool castOnSelf) const;
-        bool IsImmuneToSchool(SpellEntry const* spellInfo) const;
+        bool IsImmuneToSchool(SpellEntry const* spellInfo, uint8 effectMask) const;
 
         uint32 CalcArmorReducedDamage(Unit* pVictim, const uint32 damage);
         void CalculateDamageAbsorbAndResist(Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, const uint32 damage, uint32* absorb, int32* resist, bool canReflect = false, bool canResist = true, bool binary = false);
@@ -2279,6 +2289,7 @@ class Unit : public WorldObject
         void TriggerEvadeEvents();
         void EvadeTimerExpired();
         bool IsInEvadeMode() const { return m_evadeTimer > 0 || m_evadeMode; }
+        bool IsEvadingHome() const { return m_evadeMode == EVADE_HOME; }
         bool IsEvadeRegen() const { return (m_evadeTimer > 0 && m_evadeTimer <= 5000) || m_evadeMode; } // Only regen after 5 seconds, or when in permanent evade
         void StartEvadeTimer() { m_evadeTimer = 10000; } // 10 seconds after which action is taken
         void StopEvade(); // Stops either timer or evade state
@@ -2306,7 +2317,7 @@ class Unit : public WorldObject
         void Uncharm(Unit* charmed, uint32 spellId = 0);
 
         // Combat prevention
-        bool CanEnterCombat() { return m_canEnterCombat && m_evadeMode != EVADE_HOME; }
+        bool CanEnterCombat() { return m_canEnterCombat && !IsEvadingHome(); }
         void SetCanEnterCombat(bool can) { m_canEnterCombat = can; }
 
         void SetTurningOff(bool apply);
@@ -2328,6 +2339,11 @@ class Unit : public WorldObject
         const uint64& GetAuraUpdateMask() const { return m_auraUpdateMask; }
         void SetAuraUpdateMask(uint8 slot) { m_auraUpdateMask |= (uint64(1) << slot); }
         void ResetAuraUpdateMask() { m_auraUpdateMask = 0; }
+
+        // WorldObject overrides
+        void UpdateAllowedPositionZ(float x, float y, float& z, Map* atMap = nullptr) const override;
+
+        virtual uint32 GetSpellRank(SpellEntry const* spellInfo);
 
     protected:
 
@@ -2618,7 +2634,7 @@ struct TargetDistanceOrderNear : public std::binary_function<Unit const, Unit co
     // functor for operator ">"
     bool operator()(Unit const* _Left, Unit const* _Right) const
     {
-        return m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc != 0);
+        return m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc);
     }
 };
 
@@ -2632,7 +2648,7 @@ struct TargetDistanceOrderFarAway : public std::binary_function<Unit const, Unit
     // functor for operator "<"
     bool operator()(Unit const* _Left, Unit const* _Right) const
     {
-        return !m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc != 0);
+        return !m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc);
     }
 };
 
@@ -2646,7 +2662,7 @@ struct LowestHPNearestOrder : public std::binary_function<Unit const, Unit const
     bool operator()(Unit const* _Left, Unit const* _Right) const
     {
         if (_Left->GetHealthPercent() == _Right->GetHealthPercent())
-            return m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc != 0);
+            return m_mainTarget->GetDistanceOrder(_Left, _Right, m_distcalc);
         return _Left->GetHealthPercent() < _Right->GetHealthPercent();
     }
 };

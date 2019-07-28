@@ -169,11 +169,33 @@ void Creature::AddToWorld()
     if (!IsInWorld() && GetObjectGuid().GetHigh() == HIGHGUID_UNIT)
         GetMap()->GetObjectsStore().insert<Creature>(GetObjectGuid(), (Creature*)this);
 
+    switch (GetSubtype())
+    {
+        case CREATURE_SUBTYPE_PET:
+        case CREATURE_SUBTYPE_TEMPORARY_SUMMON:
+        {
+            std::map<uint32, uint32>& targetArray = GetMap()->GetTempCreatures();
+            if (GetSubtype() == CREATURE_SUBTYPE_PET)
+                targetArray = GetMap()->GetTempPets();
+            // If creature exists, add count
+            if (targetArray.find(this->GetEntry()) != targetArray.end())
+                ++targetArray[this->GetEntry()];
+            else
+                targetArray.insert(std::pair<uint32, uint32>(this->GetEntry(), 1));
+            break;
+        }
+        default: break;
+    }
+
     Unit::AddToWorld();
 
     // Make active if required
     if (sWorld.isForceLoadMap(GetMapId()) || (GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_ACTIVE))
         SetActiveObjectState(true);
+
+    // Check if visibility distance different
+    if (GetCreatureInfo()->visibilityDistanceType != VisibilityDistanceType::Normal)
+        SetVisibilityDistanceOverride(GetCreatureInfo()->visibilityDistanceType);
 
     if (m_countSpawns)
         GetMap()->AddToSpawnCount(GetObjectGuid());
@@ -186,6 +208,26 @@ void Creature::RemoveFromWorld()
     {
         if (GetObjectGuid().GetHigh() == HIGHGUID_UNIT)
             GetMap()->GetObjectsStore().erase<Creature>(GetObjectGuid(), (Creature*)nullptr);
+
+        switch (GetSubtype())
+        {
+            case CREATURE_SUBTYPE_PET:
+            case CREATURE_SUBTYPE_TEMPORARY_SUMMON:
+            {
+                std::map<uint32, uint32>& targetArray = GetMap()->GetTempCreatures();
+                if (GetSubtype() == CREATURE_SUBTYPE_PET)
+                    targetArray = GetMap()->GetTempPets();
+                if (targetArray.find(this->GetEntry()) != targetArray.end())
+                {
+                    --targetArray[this->GetEntry()];
+
+                    if (targetArray[this->GetEntry()] <= 0)
+                        targetArray.erase(this->GetEntry());
+                }
+                break;
+            }
+            default: break;
+        }
 
         if (m_countSpawns)
             GetMap()->RemoveFromSpawnCount(GetObjectGuid());
@@ -381,11 +423,13 @@ bool Creature::UpdateEntry(uint32 Entry, const CreatureData* data /*=nullptr*/, 
     {
         uint32 healthPercent = GetHealthPercent();
         SelectLevel();
+        UpdateAllStats(); // to be sure stats is correct regarding level of the creature
         SetHealthPercent(healthPercent);
     }
     else
     {
         SelectLevel();
+        UpdateAllStats(); // to be sure stats is correct regarding level of the creature
         if (data)
         {
             uint32 curhealth = data->curhealth ? data->curhealth : GetMaxHealth();
@@ -464,11 +508,27 @@ bool Creature::UpdateEntry(uint32 Entry, const CreatureData* data /*=nullptr*/, 
     return true;
 }
 
-void Creature::ResetEntry()
+void Creature::ResetEntry(bool respawn)
 {
     CreatureData const* data = sObjectMgr.GetCreatureData(GetGUIDLow());
     GameEventCreatureData const* eventData = sGameEventMgr.GetCreatureUpdateDataForActiveEvent(GetGUIDLow());
-    UpdateEntry(m_originalEntry, data, eventData, false);
+
+    if (respawn)
+    {
+        auto spawnEntriesMap = sObjectMgr.GetCreatureSpawnEntry();
+        auto itr = spawnEntriesMap.find(GetGUIDLow());
+        if (itr != spawnEntriesMap.end())
+        {
+            auto& spawnList = (*itr).second;
+            uint32 newEntry = spawnList[irand(0, spawnList.size() - 1)];
+            UpdateEntry(newEntry, data, eventData, false);
+            AIM_Initialize();
+        }
+        else
+            UpdateEntry(m_originalEntry, data, eventData, false);
+    }
+    else
+        UpdateEntry(m_originalEntry, data, eventData, false);
 }
 
 uint32 Creature::ChooseDisplayId(const CreatureInfo* cinfo, const CreatureData* data /*= nullptr*/, GameEventCreatureData const* eventData /*=nullptr*/)
@@ -542,11 +602,6 @@ void Creature::Update(const uint32 diff)
                 // Clear possible auras having IsDeathPersistent() attribute
                 RemoveAllAuras();
 
-                // need to preserve gameevent state
-                ResetEntry();
-
-                SelectLevel();
-                UpdateAllStats();  // to be sure stats is correct regarding level of the creature
                 SetUInt32Value(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_NONE);
                 if (m_isDeadByDefault)
                 {
@@ -1106,8 +1161,8 @@ void Creature::SaveToDB(uint32 mapid)
     // prevent add data integrity problems
     data.spawndist = GetDefaultMovementType() == IDLE_MOTION_TYPE ? 0 : m_respawnradius;
     data.currentwaypoint = 0;
-    data.curhealth = GetHealth();
-    data.curmana = GetPower(POWER_MANA);
+    data.curhealth = 0;
+    data.curmana = 0;
     data.is_dead = m_isDeadByDefault;
     // prevent add data integrity problems
     data.movementType = !m_respawnradius && GetDefaultMovementType() == RANDOM_MOTION_TYPE
@@ -1200,7 +1255,7 @@ void Creature::SelectLevel(uint32 forcedLevel /*= USE_DEFAULT_DATABASE_LEVEL*/)
             mainMinDmg = ((cCLS->BaseDamage * cinfo->DamageVariance) + (cCLS->BaseMeleeAttackPower / 14.0f)) * (cinfo->MeleeBaseAttackTime / 1000.0f) * damageMulti;
             mainMaxDmg = ((cCLS->BaseDamage * cinfo->DamageVariance *1.5f) + (cCLS->BaseMeleeAttackPower / 14.0f)) * (cinfo->MeleeBaseAttackTime / 1000.0f) * damageMulti;
             offMinDmg = mainMinDmg / 2.0f;
-            offMaxDmg = mainMinDmg / 2.0f;
+            offMaxDmg = mainMaxDmg / 2.0f;
             minRangedDmg = ((cCLS->BaseDamage * cinfo->DamageVariance) + (cCLS->BaseRangedAttackPower / 14.0f)) * (cinfo->RangedBaseAttackTime / 1000.0f) * damageMulti;
             maxRangedDmg = ((cCLS->BaseDamage * cinfo->DamageVariance * 1.5f) + (cCLS->BaseRangedAttackPower / 14.0f)) * (cinfo->RangedBaseAttackTime / 1000.0f) * damageMulti;
 
@@ -1377,9 +1432,19 @@ bool Creature::CreateFromProto(uint32 guidlow, CreatureInfo const* cinfo, const 
 {
     m_originalEntry = cinfo->Entry;
 
-    Object::_Create(guidlow, cinfo->Entry, cinfo->GetHighGuid());
+    uint32 newEntry = cinfo->Entry;
 
-    return UpdateEntry(cinfo->Entry, data, eventData, false);
+    Object::_Create(guidlow, newEntry, cinfo->GetHighGuid());
+
+    auto spawnEntriesMap = sObjectMgr.GetCreatureSpawnEntry();
+    auto itr = spawnEntriesMap.find(guidlow);
+    if (itr != spawnEntriesMap.end())
+    {
+        auto& spawnList = (*itr).second;
+        newEntry = spawnList[irand(0, spawnList.size() - 1)];
+    }
+
+    return UpdateEntry(newEntry, data, eventData, false);
 }
 
 bool Creature::LoadFromDB(uint32 guidlow, Map* map)
@@ -1610,6 +1675,8 @@ void Creature::SetDeathState(DeathState s)
         clearUnitState(static_cast<uint32>(UNIT_STAT_ALL_STATE));
 
         Unit::SetDeathState(ALIVE);
+
+        ResetEntry(true);
 
         SetLootRecipient(nullptr);
         if (GetTemporaryFactionFlags() & TEMPFACTION_RESTORE_RESPAWN)
@@ -2031,7 +2098,7 @@ void Creature::SendZoneUnderAttackMessage(Player* attacker) const
     sWorld.SendZoneUnderAttackMessage(GetZoneId(), attacker->GetTeam() == ALLIANCE ? HORDE : ALLIANCE);
 }
 
-void Creature::SetInCombatWithZone()
+void Creature::SetInCombatWithZone(bool checkAttackability)
 {
     if (!CanHaveThreatList())
     {
@@ -2061,6 +2128,9 @@ void Creature::SetInCombatWithZone()
 
             if (pPlayer->isAlive())
             {
+                if (checkAttackability && !CanAttack(pPlayer))
+                    continue;
+
                 AddThreat(pPlayer);
                 SetInCombatWith(pPlayer);
                 pPlayer->SetInCombatWith(this);
@@ -2136,6 +2206,9 @@ bool Creature::MeetsSelectAttackingRequirement(Unit* pTarget, SpellEntry const* 
 
             return true;
         }
+
+        if (pSpellInfo->HasAttribute(SPELL_ATTR_EX3_TARGET_ONLY_PLAYER) && pTarget->GetTypeId() != TYPEID_PLAYER)
+            return false;
 
         switch (pSpellInfo->rangeIndex)
         {

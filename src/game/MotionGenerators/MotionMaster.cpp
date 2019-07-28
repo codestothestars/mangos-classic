@@ -286,28 +286,25 @@ void MotionMaster::MoveChase(Unit* target, float dist, float angle, bool moveFur
 
     if (GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
     {
-        if (m_owner->GetTypeId() == TYPEID_PLAYER)
-        {
-            auto gen = (ChaseMovementGenerator<Player>*)top();
-            gen->SetMovementParameters(dist, angle, moveFurther);
-            gen->SetNewTarget(*target);
-        }
-        else
-        {
-            auto gen = (ChaseMovementGenerator<Creature>*)top();
-            gen->SetMovementParameters(dist, angle, moveFurther);
-            gen->SetNewTarget(*target);
-        }
-        top()->Reset(*m_owner);
+        auto gen = (ChaseMovementGenerator*)top();
+        gen->SetOffsetAndAngle(dist, angle, moveFurther);
+        gen->SetNewTarget(*target);
         return;
     }
 
     DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "%s chase to %s", m_owner->GetGuidStr().c_str(), target->GetGuidStr().c_str());
 
-    if (m_owner->GetTypeId() == TYPEID_PLAYER)
-        Mutate(new ChaseMovementGenerator<Player>(*target, dist, angle, moveFurther, walk, combat));
-    else
-        Mutate(new ChaseMovementGenerator<Creature>(*target, dist, angle, moveFurther, walk, combat));
+    Mutate(new ChaseMovementGenerator(*target, dist, angle, moveFurther, walk, combat));
+}
+
+void MotionMaster::DistanceYourself(float dist)
+{
+    if (GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
+    {
+        auto gen = (ChaseMovementGenerator*)top();
+        gen->DistanceYourself(*m_owner, dist);
+        return;
+    }
 }
 
 void MotionMaster::MoveFollow(Unit* target, float dist, float angle, bool asMain)
@@ -318,7 +315,7 @@ void MotionMaster::MoveFollow(Unit* target, float dist, float angle, bool asMain
     if (asMain)
         Clear(false, true);
     else
-        Clear();
+        Clear(!empty()); // avoid resetting if we are already empty
 
     // ignore movement request if target not exist
     if (!target)
@@ -332,14 +329,14 @@ void MotionMaster::MoveFollow(Unit* target, float dist, float angle, bool asMain
         Mutate(new FollowMovementGenerator<Creature>(*target, dist, angle));
 }
 
-void MotionMaster::MovePoint(uint32 id, float x, float y, float z, bool generatePath)
+void MotionMaster::MovePoint(uint32 id, float x, float y, float z, bool generatePath, ForcedMovement forcedMovement)
 {
     DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "%s targeted point (Id: %u X: %f Y: %f Z: %f)", m_owner->GetGuidStr().c_str(), id, x, y, z);
 
     if (m_owner->GetTypeId() == TYPEID_PLAYER)
-        Mutate(new PointMovementGenerator<Player>(id, x, y, z, generatePath));
+        Mutate(new PointMovementGenerator<Player>(id, x, y, z, generatePath, forcedMovement));
     else
-        Mutate(new PointMovementGenerator<Creature>(id, x, y, z, generatePath));
+        Mutate(new PointMovementGenerator<Creature>(id, x, y, z, generatePath, forcedMovement));
 }
 
 void MotionMaster::MoveSeekAssistance(float x, float y, float z)
@@ -494,7 +491,7 @@ void MotionMaster::propagateSpeedChange()
     Impl::container_type::iterator it = Impl::c.begin();
     for (; it != end(); ++it)
     {
-        (*it)->unitSpeedChanged();
+        (*it)->UnitSpeedChanged();
     }
 }
 

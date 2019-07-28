@@ -220,10 +220,25 @@ ChatCommand* ChatHandler::getCommandTable()
         { nullptr,          0,                  false, nullptr,                                             "", nullptr }
     };
 
+    static ChatCommand debugVisibilityCommandTable[] =
+    {
+        { "atclient",       SEC_MODERATOR,      false, &ChatHandler::HandleDebugHaveAtClientCommand,        "", nullptr },
+        { "isvisible",      SEC_MODERATOR,      false, &ChatHandler::HandleDebugIsVisibleCommand,           "", nullptr },
+        { nullptr,          0,                  false, nullptr,                                             "", nullptr }
+    };
+
     static ChatCommand bgCommandTable[] =
     {
         { "start",          SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugBattlegroundStartCommand,   "", nullptr },
         { "",               SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugBattlegroundCommand,        "", nullptr },
+        { nullptr,          0,                  false, nullptr,                                             "", nullptr }
+    };
+
+    static ChatCommand debugPerformanceCommandTable[] =
+    {
+        { "maps",           SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugMaps,                       "", nullptr },
+        { "tempspawn",      SEC_ADMINISTRATOR,  false, &ChatHandler::HandleShowTemporarySpawnList,          "", nullptr },
+        { "gridsloaded",    SEC_ADMINISTRATOR,  false, &ChatHandler::HandleGridsLoadedCount,                "", nullptr },
         { nullptr,          0,                  false, nullptr,                                             "", nullptr }
     };
 
@@ -250,6 +265,8 @@ ChatCommand* ChatHandler::getCommandTable()
         { "waypoint",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugWaypoint,                   "", nullptr },
         { "byte",           SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugByteFields,                 "", nullptr },
         { "moveflag",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugMoveflags,                  "", nullptr },
+        { "visibility",     SEC_MODERATOR,      false, nullptr,                                             "", debugVisibilityCommandTable },
+        { "perf",           SEC_ADMINISTRATOR,  false, nullptr,                                             "", debugPerformanceCommandTable },
         { "lootdropstats",  SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDebugLootDropStats,              "", nullptr },
         { "utf8overflow",   SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleDebugOverflowCommand,            "", nullptr },
         { nullptr,          0,                  false, nullptr,                                             "", nullptr }
@@ -635,6 +652,14 @@ ChatCommand* ChatHandler::getCommandTable()
         { nullptr,          0,                  false, nullptr,                                        "", nullptr }
     };
 
+    static ChatCommand movementCommandTable[] =
+    {
+        { "movegens",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleMovegensCommand,            "", nullptr },
+        { "cometome",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleComeToMeCommand,            "", nullptr },
+        { "movespeed",      SEC_ADMINISTRATOR,  false, &ChatHandler::HandleMovespeedShowCommand,       "", nullptr },
+        { nullptr,          0,                  false, nullptr,                                        "", nullptr }
+    };
+
     static ChatCommand serverIdleRestartCommandTable[] =
     {
         { "cancel",         SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleServerShutDownCancelCommand, "", nullptr },
@@ -811,8 +836,7 @@ ChatCommand* ChatHandler::getCommandTable()
         { "loadscripts",    SEC_ADMINISTRATOR,  true,  &ChatHandler::HandleLoadScriptsCommand,         "", nullptr },
         { "mute",           SEC_MODERATOR,      true,  &ChatHandler::HandleMuteCommand,                "", nullptr },
         { "unmute",         SEC_MODERATOR,      true,  &ChatHandler::HandleUnmuteCommand,              "", nullptr },
-        { "movegens",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleMovegensCommand,            "", nullptr },
-        { "cometome",       SEC_ADMINISTRATOR,  false, &ChatHandler::HandleComeToMeCommand,            "", nullptr },
+        { "movement",       SEC_PLAYER,         true,  nullptr,                                        "", movementCommandTable },
         { "damage",         SEC_ADMINISTRATOR,  false, &ChatHandler::HandleDamageCommand,              "", nullptr },
         { "combatstop",     SEC_GAMEMASTER,     false, &ChatHandler::HandleCombatStopCommand,          "", nullptr },
         { "repairitems",    SEC_GAMEMASTER,     true,  &ChatHandler::HandleRepairitemsCommand,         "", nullptr },
@@ -969,7 +993,7 @@ void ChatHandler::SendSysMessage(const char* str)
 
     while (char* line = LineFromMessage(pos))
     {
-        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, m_session->GetPlayer()->GetObjectGuid());
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line);
         m_session->SendPacket(data);
     }
 
@@ -988,7 +1012,7 @@ void ChatHandler::SendGlobalSysMessage(const char* str) const
 
     while (char* line = LineFromMessage(pos))
     {
-        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line, LANG_UNIVERSAL, CHAT_TAG_NONE, guid);
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_SYSTEM, line);
         sWorld.SendGlobalMessage(data);
     }
 

@@ -180,8 +180,7 @@ class UnitAI
          * @param pDoneTo Unit* to whom Damage of amount uiDamage will be dealt
          * @param uiDamage Amount of Damage that will be dealt, can be changed here
          */
-        virtual void DamageDeal(Unit* doneTo, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) { DamageDeal(doneTo, damage, damageType); }
-        virtual void DamageDeal(Unit* /*doneTo*/, uint32& /*damage*/, DamageEffectType damageType) {}
+        virtual void DamageDeal(Unit* doneTo, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) {}
 
         /**
          * Called at any Damage from any attacker (before damage apply)
@@ -190,8 +189,7 @@ class UnitAI
          * @param pDealer Unit* who will deal Damage to the creature
          * @param uiDamage Amount of Damage that will be dealt, can be changed here
          */
-        virtual void DamageTaken(Unit* dealer, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) { DamageTaken(dealer, damage, damageType); }
-        virtual void DamageTaken(Unit* /*dealer*/, uint32& /*damage*/, DamageEffectType damageType) {}
+        virtual void DamageTaken(Unit* dealer, uint32& damage, DamageEffectType damageType, SpellEntry const* spellInfo) {}
 
         /**
          * Called when the creature is killed
@@ -400,14 +398,17 @@ class UnitAI
         /*
          * Notifies AI on cast state change
          */
-        virtual void OnSpellCastStateChange(SpellEntry const* spellInfo, bool state, WorldObject* target = nullptr);
+        virtual void OnSpellCastStateChange(Spell const* spell, bool state, WorldObject* target = nullptr);
 
         /*
          * Notifies AI on channel state update
          */
-        virtual void OnChannelStateChange(SpellEntry const* spellInfo, bool state, WorldObject* target = nullptr);
+        virtual void OnChannelStateChange(Spell const* spell, bool state, WorldObject* target = nullptr);
 
-        virtual void TimedFleeingEnded();
+        /*
+         * Notifies AI on successfull spell execution
+         */
+        virtual void OnSpellCooldownAdded(SpellEntry const* spellInfo) {}
 
         void CheckForHelp(Unit* /*who*/, Unit* /*me*/, float /*dist*/);
         void DetectOrAttack(Unit* who);
@@ -450,6 +451,12 @@ class UnitAI
 
         // AI selection - works in connection with IsPossessCharmType
         virtual bool CanHandleCharm() { return false; }
+
+        // Movement generator responses
+        virtual void TimedFleeingEnded();
+
+        virtual void DistancingStarted();
+        virtual void DistancingEnded();
 
     protected:
         virtual std::string GetAIName() { return "UnitAI"; }
