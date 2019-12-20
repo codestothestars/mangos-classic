@@ -50,3 +50,20 @@ UPDATE spell_template SET Attributes=Attributes|0x00010000 WHERE Id IN(12328);
 UPDATE spell_template SET EffectRadiusIndex1=EffectRadiusIndex2 WHERE Id IN(24811);
 -- Opening Termite Barrel - target flags for GO/ITEM, effect targets GO/ITEM yet target targets units - fixes apparent typo
 UPDATE spell_template SET EffectImplicitTargetA1=26 WHERE Id IN(18952);
+-- Talents - Improved Scorch and Shadow Weaving have TARGET_UNIT_ENEMY, yet the auras are placed on caster anyway
+-- It is possible talents are supposed to bypass normal casting, but evidenced by wotlk, the rest are all caster targeted, so assuming copypaste wrong data possibility as well
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(11095,12872,12873,15257,15331,15332,15333,15334);
+-- Improved Wing Clip - talent aura which is meant to be cast on self
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(19228,19232,19233);
+-- Entrapment - talent aura which is meant to be cast on self
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(19184,19387,19388);
+-- Improved Hamstring - talent aura which is meant to be cast on self
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(12289,12668,23695);
+-- Celestial Focus - talent aura which is meant to be cast on self
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(16850,16923,16924);
+-- Ruthlessness - talent aura which is meant to be cast on self
+UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(14156,14160);
+
+-- Mangletooth - These spells need to ignore LOS
+UPDATE spell_template SET AttributesEx2 = AttributesEx2|4 WHERE id IN (7764, 16618, 10767, 16610, 16612, 17013);
+

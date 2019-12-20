@@ -744,6 +744,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOADSKILLS,
     PLAYER_LOGIN_QUERY_LOADMAILS,
     PLAYER_LOGIN_QUERY_LOADMAILEDITEMS,
+    PLAYER_LOGIN_QUERY_LOADWEEKLYQUESTSTATUS,
 
     MAX_PLAYER_LOGIN_QUERY
 };
@@ -1139,7 +1140,7 @@ class Player : public Unit
         Item* StoreItem(ItemPosCountVec const& dest, Item* pItem, bool update);
         Item* EquipNewItem(uint16 pos, uint32 item, bool update);
         Item* EquipItem(uint16 pos, Item* pItem, bool update);
-        void AutoUnequipOffhandIfNeed();
+        void AutoUnequipOffhandIfNeed(uint8 bag = NULL_BAG);
         bool StoreNewItemInBestSlots(uint32 titem_id, uint32 titem_amount);
         Item* StoreNewItemInInventorySlot(uint32 itemEntry, uint32 amount);
 
@@ -1279,12 +1280,16 @@ class Player : public Unit
         bool SatisfyQuestExclusiveGroup(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestNextChain(Quest const* qInfo, bool msg) const;
         bool SatisfyQuestPrevChain(Quest const* qInfo, bool msg) const;
+        bool SatisfyQuestWeek(Quest const* qInfo) const;
         bool CanGiveQuestSourceItemIfNeed(Quest const* pQuest, ItemPosCountVec* dest = nullptr) const;
         void GiveQuestSourceItemIfNeed(Quest const* pQuest);
         bool TakeQuestSourceItem(uint32 quest_id, bool msg);
         bool GetQuestRewardStatus(uint32 quest_id) const;
         QuestStatus GetQuestStatus(uint32 quest_id) const;
         void SetQuestStatus(uint32 quest_id, QuestStatus status);
+
+        void SetWeeklyQuestStatus(uint32 quest_id);
+        void ResetWeeklyQuestStatus();
 
         uint16 FindQuestSlot(uint32 quest_id) const;
         uint32 GetQuestSlotQuestId(uint16 slot) const { return GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET); }
@@ -1625,8 +1630,6 @@ class Player : public Unit
         float GetMeleeCritFromAgility() const;
         float GetDodgeFromAgility(float amount) const;
         float GetSpellCritFromIntellect() const;
-        float OCTRegenHPPerSpirit() const;
-        float OCTRegenMPPerSpirit() const;
 
         void UpdateBlockPercentage();
         void UpdateCritPercentage(WeaponAttackType attType);
@@ -2211,7 +2214,6 @@ class Player : public Unit
 
         // Public Save system functions
         void SaveItemToInventory(Item* item); // optimization for gift wrapping
-
     protected:
         /*********************************************************/
         /***               BATTLEGROUND SYSTEM                 ***/
@@ -2236,6 +2238,7 @@ class Player : public Unit
         // We allow only one timed quest active at the same time. Below can then be simple value instead of set.
         typedef std::set<uint32> QuestSet;
         QuestSet m_timedquests;
+        QuestSet m_weeklyquests;
 
         ObjectGuid m_dividerGuid;
         uint32 m_ingametime;
@@ -2253,6 +2256,7 @@ class Player : public Unit
         void _LoadMails(QueryResult* result);
         void _LoadMailedItems(QueryResult* result);
         void _LoadQuestStatus(QueryResult* result);
+        void _LoadWeeklyQuestStatus(QueryResult* result);
         void _LoadGroup(QueryResult* result);
         void _LoadSkills(QueryResult* result);
         void _LoadSpells(QueryResult* result);
@@ -2272,6 +2276,7 @@ class Player : public Unit
         void _SaveHonorCP();
         void _SaveMail();
         void _SaveQuestStatus();
+        void _SaveWeeklyQuestStatus();
         void _SaveSkills();
         void _SaveSpells();
         void _SaveBGData();
@@ -2369,6 +2374,8 @@ class Player : public Unit
         uint32 m_cinematic;
 
         TradeData* m_trade;
+
+        bool   m_WeeklyQuestChanged;
 
         uint32 m_drunkTimer;
         uint16 m_drunk;
