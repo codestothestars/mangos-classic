@@ -281,7 +281,7 @@ void UnitAI::OnSpellCastStateChange(Spell const* spell, bool state, WorldObject*
         return;
 
     // Creature should always stop before it will cast a non-instant spell
-    if (spell->GetCastTime() || (IsChanneledSpell(spellInfo) && spellInfo->ChannelInterruptFlags & CHANNEL_FLAG_MOVEMENT))
+    if ((spell->GetCastTime() && spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT) || (IsChanneledSpell(spellInfo) && spellInfo->ChannelInterruptFlags & CHANNEL_FLAG_MOVEMENT))
         m_unit->StopMoving();
 
     bool forceTarget = false;
@@ -430,7 +430,7 @@ void UnitAI::DetectOrAttack(Unit* who)
     }
 }
 
-bool UnitAI::CanTriggerStealthAlert(Unit* who, float attackRadius) const
+bool UnitAI::CanTriggerStealthAlert(Unit* who, float /*attackRadius*/) const
 {
     if (who->GetTypeId() != TYPEID_PLAYER)
         return false;
@@ -564,9 +564,20 @@ Unit* UnitAI::DoSelectLowestHpFriendly(float range, float minMissing, bool perce
     return pUnit;
 }
 
+void UnitAI::DoResetThreat()
+{
+    if (!m_unit->CanHaveThreatList() || m_unit->getThreatManager().isThreatListEmpty())
+    {
+        script_error_log("DoResetThreat called for creature that either cannot have threat list or has empty threat list (m_creature entry = %d)", m_unit->GetEntry());
+        return;
+    }
+
+    m_unit->getThreatManager().modifyAllThreatPercent(-100);
+}
+
 bool UnitAI::CanExecuteCombatAction()
 {
-    return m_unit->CanReactInCombat() && !m_unit->hasUnitState(UNIT_STAT_DONT_TURN | UNIT_STAT_SEEKING_ASSISTANCE | UNIT_STAT_CHANNELING) && !m_unit->IsNonMeleeSpellCasted(false) && !m_combatScriptHappening;
+    return m_unit->CanReactInCombat() && !m_unit->hasUnitState(UNIT_STAT_DONT_TURN | UNIT_STAT_SEEKING_ASSISTANCE) && !m_unit->IsNonMeleeSpellCasted(false) && !m_combatScriptHappening;
 }
 
 void UnitAI::SetMeleeEnabled(bool state)

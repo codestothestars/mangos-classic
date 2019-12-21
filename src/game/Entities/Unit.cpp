@@ -392,6 +392,7 @@ Unit::Unit() :
 
     m_canEnterCombat = true;
 
+    m_noThreat = false;
     m_extraAttacksExecuting = false;
 
     m_baseSpeedWalk = 1.f;
@@ -508,7 +509,7 @@ void Unit::Update(const uint32 diff)
         ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, GetHealth() < GetMaxHealth() * 0.20f);
 }
 
-void Unit::AddCooldown(SpellEntry const& spellEntry, ItemPrototype const* itemProto, bool permanent, uint32 forcedDuration)
+void Unit::AddCooldown(SpellEntry const& spellEntry, ItemPrototype const* /*itemProto*/, bool /*permanent*/, uint32 forcedDuration)
 {
     uint32 recTimeDuration = forcedDuration ? forcedDuration : spellEntry.RecoveryTime;
     if (recTimeDuration || spellEntry.CategoryRecoveryTime)
@@ -857,7 +858,7 @@ void Unit::Kill(Unit* victim, DamageEffectType damagetype, SpellEntry const* spe
     }
 
     // Spirit of Redemtion Talent
-    bool damageFromSpiritOfRedemtionTalent = spellProto && spellProto->Id == 27795;
+    bool damageFromSpiritOfRedemtionTalent = spellProto && spellProto->Id == 27965;
     // if talent known but not triggered (check priest class for speedup check)
     Aura* spiritOfRedemtionTalentReady = nullptr;
     if (!damageFromSpiritOfRedemtionTalent &&           // not called from SPELL_AURA_SPIRIT_OF_REDEMPTION
@@ -1006,7 +1007,7 @@ void Unit::HandleDamageDealt(Unit* victim, uint32& damage, CleanDamage const* cl
 
     victim->ModifyHealth(-(int32)damage);
 
-    if (CanAttack(victim) && (!spellProto || (!spellProto->HasAttribute(SPELL_ATTR_EX3_NO_INITIAL_AGGRO) &&
+    if (victim->CanAttack(this) && (!spellProto || (!spellProto->HasAttribute(SPELL_ATTR_EX3_NO_INITIAL_AGGRO) &&
         !spellProto->HasAttribute(SPELL_ATTR_EX_NO_THREAT))) && CanEnterCombat() && victim->CanEnterCombat())
     {
         float threat = damage * sSpellMgr.GetSpellThreatMultiplier(spellProto);
@@ -1214,17 +1215,14 @@ void Unit::JustKilledCreature(Creature* victim, Player* responsiblePlayer)
     if (victim->GetInstanceId())
     {
         Map* m = victim->GetMap();
-        Player* creditedPlayer = GetBeneficiaryPlayer();
-        // TODO: do instance binding anyway if the charmer/owner is offline
-
-        if (m->IsDungeon() && creditedPlayer)
+        if (m->IsDungeon())
         {
-            if (m->IsRaid())
+            Player* creditedPlayer = GetBeneficiaryPlayer(); // TODO: do instance binding anyway if the charmer/owner is offline
+            if (m->IsRaid() && creditedPlayer)
             {
                 if (victim->GetCreatureInfo()->ExtraFlags & CREATURE_EXTRA_FLAG_INSTANCE_BIND)
                     ((DungeonMap*)m)->PermBindAllPlayers(creditedPlayer);
             }
-
             ((DungeonMap*)m)->GetPersistanceState()->UpdateEncounterState(ENCOUNTER_CREDIT_KILL_CREATURE, victim->GetEntry());
         }
     }
@@ -1710,7 +1708,7 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
         {
             calcDamageInfo->TargetState = VICTIMSTATE_PARRY;
             calcDamageInfo->procEx |= PROC_EX_PARRY;
-            calcDamageInfo->cleanDamage += calcDamageInfo->totalDamage;
+            calcDamageInfo->cleanDamage = 0;
             calcDamageInfo->totalDamage = 0;
 
             for (uint8 i = 0; i < m_weaponDamageInfo.weapon[calcDamageInfo->attackType].lines; i++)
@@ -1722,7 +1720,7 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
         {
             calcDamageInfo->TargetState = VICTIMSTATE_DODGE;
             calcDamageInfo->procEx |= PROC_EX_DODGE;
-            calcDamageInfo->cleanDamage += calcDamageInfo->totalDamage;
+            calcDamageInfo->cleanDamage = 0;
             calcDamageInfo->totalDamage = 0;
 
             for (uint8 i = 0; i < m_weaponDamageInfo.weapon[calcDamageInfo->attackType].lines; i++)
@@ -2039,7 +2037,7 @@ uint32 Unit::CalcArmorReducedDamage(Unit* pVictim, const uint32 damage)
     return (newdamage > 1) ? newdamage : 1;
 }
 
-void Unit::CalculateDamageAbsorbAndResist(Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, const uint32 damage, uint32* absorb, int32* resist, bool canReflect, bool canResist, bool binary)
+void Unit::CalculateDamageAbsorbAndResist(Unit* pCaster, SpellSchoolMask schoolMask, DamageEffectType damagetype, const uint32 damage, uint32* absorb, int32* resist, bool /*canReflect*/, bool canResist, bool binary)
 {
     if (!pCaster || !isAlive() || !damage)
         return;
@@ -3924,17 +3922,24 @@ bool Unit::IsNonMeleeSpellCasted(bool withDelayed, bool skipChanneled, bool skip
     // Maybe later some special spells will be excluded too.
 
     // generic spells are casted when they are not finished and not delayed
-    if (m_currentSpells[CURRENT_GENERIC_SPELL] &&
-            (m_currentSpells[CURRENT_GENERIC_SPELL]->getState() != SPELL_STATE_FINISHED) &&
-            (withDelayed || m_currentSpells[CURRENT_GENERIC_SPELL]->getState() != SPELL_STATE_TRAVELING))
-        return true;
+    if (Spell const* genericSpell = m_currentSpells[CURRENT_GENERIC_SPELL])
+    {
+        if (genericSpell->getState() != SPELL_STATE_FINISHED)
+        {
+            bool specialResult = true;
+            if (forMovement) // mobs can move during spells without this flag
+                specialResult = genericSpell->m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT;
+            if (specialResult && (withDelayed || genericSpell->getState() != SPELL_STATE_TRAVELING))
+                return true;
+        }
+    }
 
     // channeled spells may be delayed, but they are still considered casted
     if (!skipChanneled)
     {
         if (Spell const* channeledSpell = m_currentSpells[CURRENT_CHANNELED_SPELL])
         {
-            bool attributeResult;
+            bool attributeResult = false;
             if (!forMovement)
                 attributeResult = channeledSpell->m_spellInfo->HasAttribute(SPELL_ATTR_EX4_CAN_CAST_WHILE_CASTING);
 
@@ -4557,7 +4562,7 @@ void Unit::RemoveSingleAuraFromSpellAuraHolder(uint32 spellId, SpellEffectIndex 
     }
 }
 
-void Unit::RemoveAuraHolderDueToSpellByDispel(uint32 spellId, uint32 stackAmount, ObjectGuid casterGuid, Unit* dispeller)
+void Unit::RemoveAuraHolderDueToSpellByDispel(uint32 spellId, uint32 stackAmount, ObjectGuid casterGuid, Unit* /*dispeller*/)
 {
     RemoveAuraHolderFromStack(spellId, stackAmount, casterGuid, AURA_REMOVE_BY_DISPEL);
 }
@@ -5704,7 +5709,7 @@ bool Unit::Attack(Unit* victim, bool meleeAttack)
     return true;
 }
 
-bool Unit::AttackStop(bool targetSwitch /*= false*/, bool includingCast /*= false*/, bool includingCombo /*= false*/)
+bool Unit::AttackStop(bool targetSwitch /*= false*/, bool includingCast /*= false*/, bool /*includingCombo = false*/)
 {
     // interrupt cast only id includingCast == true and we have something to interrupt.
     if (includingCast && IsNonMeleeSpellCasted(false))
@@ -7454,7 +7459,7 @@ int32 Unit::ModifyPower(Powers power, int32 dVal)
     return gain;
 }
 
-bool Unit::IsVisibleForOrDetect(Unit const* u, WorldObject const* viewPoint, bool detect, bool inVisibleList, bool is3dDistance, bool spell) const
+bool Unit::IsVisibleForOrDetect(Unit const* u, WorldObject const* viewPoint, bool detect, bool /*inVisibleList*/, bool is3dDistance, bool spell) const
 {
     if (!u || !IsInMap(u))
         return false;
@@ -7812,7 +7817,7 @@ void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
             break;
         }
         case MOVE_RUN_BACK:
-            return;
+            break;
         case MOVE_SWIM:
         {
             main_speed_mod  = GetMaxPositiveAuraModifier(SPELL_AURA_MOD_INCREASE_SWIM_SPEED);
@@ -11004,4 +11009,50 @@ uint32 Unit::GetSpellRank(SpellEntry const* spellInfo)
     if (spellInfo->maxLevel > 0 && spellRank >= spellInfo->maxLevel * 5)
         spellRank = spellInfo->maxLevel * 5;
     return spellRank;
+}
+
+float Unit::OCTRegenHPPerSpirit() const
+{
+    float regen = 0.0f;
+
+    float Spirit = GetStat(STAT_SPIRIT);
+    uint8 Class = getClass();
+
+    switch (Class)
+    {
+        case CLASS_DRUID:   regen = (Spirit * 0.11 + 1);    break;
+        case CLASS_HUNTER:  regen = (Spirit * 0.43 - 5.5);  break;
+        case CLASS_MAGE:    regen = (Spirit * 0.11 + 1);    break;
+        case CLASS_PALADIN: regen = (Spirit * 0.25);        break;
+        case CLASS_PRIEST:  regen = (Spirit * 0.15 + 1.4);  break;
+        case CLASS_ROGUE:   regen = (Spirit * 0.84 - 13);   break;
+        case CLASS_SHAMAN:  regen = (Spirit * 0.28 - 3.6);  break;
+        case CLASS_WARLOCK: regen = (Spirit * 0.12 + 1.5);  break;
+        case CLASS_WARRIOR: regen = (Spirit * 1.26 - 22.6); break;
+    }
+
+    return regen;
+}
+
+float Unit::OCTRegenMPPerSpirit() const
+{
+    float addvalue = 0.0;
+
+    float Spirit = GetStat(STAT_SPIRIT);
+    uint8 Class = getClass();
+
+    switch (Class)
+    {
+        case CLASS_DRUID:   addvalue = (Spirit / 5 + 15);   break;
+        case CLASS_HUNTER:  addvalue = (Spirit / 5 + 15);   break;
+        case CLASS_MAGE:    addvalue = (Spirit / 4 + 12.5); break;
+        case CLASS_PALADIN: addvalue = (Spirit / 5 + 15);   break;
+        case CLASS_PRIEST:  addvalue = (Spirit / 4 + 12.5); break;
+        case CLASS_SHAMAN:  addvalue = (Spirit / 5 + 17);   break;
+        case CLASS_WARLOCK: addvalue = (Spirit / 5 + 15);   break;
+    }
+
+    addvalue /= 2.0f;   // the above addvalue are given per tick which occurs every 2 seconds, hence this divide by 2
+
+    return addvalue;
 }

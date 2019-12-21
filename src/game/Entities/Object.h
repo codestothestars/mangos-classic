@@ -651,6 +651,29 @@ class Object
 
 struct WorldObjectChangeAccumulator;
 
+struct TempSpawnSettings
+{
+    WorldObject* spawner = nullptr;
+    uint32 entry;
+    float x, y, z, ori;
+    TempSpawnType spawnType;
+    uint32 despawnTime;
+    uint32 corpseDespawnTime = 0;
+    bool activeObject = false;
+    bool setRun = false;
+    uint32 pathId = 0;
+    uint32 faction = 0;
+    uint32 modelId = 0;
+    bool spawnCounting = false;
+    bool forcedOnTop = false;
+    TempSpawnSettings() {}
+    TempSpawnSettings(WorldObject* spawner, uint32 entry, float x, float y, float z, float ori, TempSpawnType spawnType, uint32 despawnTime, bool activeObject = false, bool setRun = false, uint32 pathId = 0, uint32 faction = 0,
+        uint32 modelId = 0, bool spawnCounting = false, bool forcedOnTop = false) :
+        spawner(spawner), entry(entry), x(x), y(y), z(z), ori(ori), spawnType(spawnType), despawnTime(despawnTime), activeObject(activeObject), setRun(setRun), pathId(pathId), modelId(modelId), spawnCounting(spawnCounting),
+        forcedOnTop(forcedOnTop)
+    {}
+};
+
 class WorldObject : public Object
 {
         friend struct WorldObjectChangeAccumulator;
@@ -845,8 +868,9 @@ class WorldObject : public Object
         void AddToClientUpdateList() override;
         void RemoveFromClientUpdateList() override;
         void BuildUpdateData(UpdateDataMapType&) override;
-
-        Creature* SummonCreature(uint32 id, float x, float y, float z, float ang, TempSpawnType spwtype, uint32 despwtime, bool asActiveObject = false, bool setRun = false, uint32 pathId = 0, uint32 faction = 0, bool spawnCounting = false, bool forcedOnTop = false);
+        
+        static Creature* SummonCreature(TempSpawnSettings settings, Map* map);
+        Creature* SummonCreature(uint32 id, float x, float y, float z, float ang, TempSpawnType spwtype, uint32 despwtime, bool asActiveObject = false, bool setRun = false, uint32 pathId = 0, uint32 faction = 0, uint32 modelId = 0, bool spawnCounting = false, bool forcedOnTop = false);
 
         bool isActiveObject() const { return m_isActiveObject || m_viewPoint.hasViewers(); }
         void SetActiveObjectState(bool active);
@@ -865,7 +889,7 @@ class WorldObject : public Object
 
         // Game Event Notification system
         virtual bool IsNotifyOnEventObject() { return m_isOnEventNotified; }
-        virtual void OnEventHappened(uint16 event_id, bool activate, bool resume) {}
+        virtual void OnEventHappened(uint16 /*event_id*/, bool /*activate*/, bool /*resume*/) {}
         void SetNotifyOnEventState(bool state);
 
         virtual void AddToWorld() override;
@@ -879,7 +903,7 @@ class WorldObject : public Object
         virtual void RemoveSpellCooldown(SpellEntry const& spellEntry, bool updateClient = true);
         void RemoveSpellCooldown(uint32 spellId, bool updateClient = true);
         virtual void RemoveSpellCategoryCooldown(uint32 category, bool updateClient = true);
-        virtual void RemoveAllCooldowns(bool sendOnly = false) { m_GCDCatMap.clear(); m_cooldownMap.clear(); m_lockoutMap.clear(); }
+        virtual void RemoveAllCooldowns(bool /*sendOnly*/ = false) { m_GCDCatMap.clear(); m_cooldownMap.clear(); m_lockoutMap.clear(); }
         bool IsSpellReady(SpellEntry const& spellEntry, ItemPrototype const* itemProto = nullptr) const;
         bool IsSpellReady(uint32 spellId, ItemPrototype const* itemProto = nullptr) const;
         virtual void LockOutSpells(SpellSchoolMask schoolMask, uint32 duration);
@@ -887,8 +911,8 @@ class WorldObject : public Object
 
         virtual void InspectingLoot() {}
 
-        virtual bool CanAttackSpell(Unit const* target, SpellEntry const* spellInfo = nullptr, bool isAOE = false) const { return true; }
-        virtual bool CanAssistSpell(Unit const* target, SpellEntry const* spellInfo = nullptr) const { return true; }
+        virtual bool CanAttackSpell(Unit const* /*target*/, SpellEntry const* /*spellInfo*/ = nullptr, bool /*isAOE*/ = false) const { return true; }
+        virtual bool CanAssistSpell(Unit const* /*target*/, SpellEntry const* /*spellInfo*/ = nullptr) const { return true; }
 
     protected:
         explicit WorldObject();
