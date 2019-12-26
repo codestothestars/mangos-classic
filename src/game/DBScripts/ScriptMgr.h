@@ -82,7 +82,7 @@ enum ScriptCommand                                          // resSource, resTar
     SCRIPT_COMMAND_MODIFY_NPC_FLAGS         = 29,           // resSource = Creature
     // datalong=NPCFlags
     // datalong2:0x00=toggle, 0x01=add, 0x02=remove
-    SCRIPT_COMMAND_SEND_TAXI_PATH           = 30,           // datalong = taxi path id (source or target must be player)
+    SCRIPT_COMMAND_SEND_TAXI_NODE           = 30,           // datalong = taxi node id (source or target must be player)
     SCRIPT_COMMAND_TERMINATE_SCRIPT         = 31,           // datalong = search for npc entry if provided
     // datalong2= search distance
     // data_flags & SCRIPT_FLAG_COMMAND_ADDITIONAL: terminate steps of this script if npc found
@@ -326,11 +326,11 @@ struct ScriptInfo
             uint32 change_flag;                             // datalong2
         } npcFlag;
 
-        struct                                              // SCRIPT_COMMAND_SEND_TAXI_PATH (30)
+        struct                                              // SCRIPT_COMMAND_SEND_TAXI_NODE (30)
         {
-            uint32 taxiPathId;                              // datalong
+            uint32 taxiNodeId;                              // datalong
             uint32 empty;
-        } sendTaxiPath;
+        } sendTaxiNode;
 
         struct                                              // SCRIPT_COMMAND_TERMINATE_SCRIPT (31)
         {

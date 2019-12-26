@@ -61,6 +61,7 @@
 #include "Server/SQLStorages.h"
 #include "Loot/LootMgr.h"
 #include "World/WorldState.h"
+using namespace std;
 
 #ifdef BUILD_PLAYERBOT
 #include "PlayerBot/Base/PlayerbotAI.h"
@@ -16793,9 +16794,9 @@ bool Player::ActivateTaxiPathTo(std::vector<uint32> const& nodes, Creature* npc 
     return true;
 }
 
-bool Player::ActivateTaxiPathTo(uint32 path_id, uint32 spellid /*= 0*/)
+bool Player::ActivateTaxiPathTo(uint32 node_id, uint32 spellid /*= 0*/)
 {
-    TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(path_id);
+    TaxiPathEntry const* entry = sTaxiPathStore.LookupEntry(node_id);
     if (!entry)
         return false;
 

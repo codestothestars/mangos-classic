@@ -33,6 +33,7 @@
 #include "MotionGenerators/WaypointMovementGenerator.h"
 #include "Mails/Mail.h"
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
+using namespace std;
 
 ScriptMapMapName sQuestEndScripts;
 ScriptMapMapName sQuestStartScripts;
@@ -612,14 +613,14 @@ void ScriptMgr::LoadScripts(ScriptMapMapName& scripts, const char* tablename)
             }
             case SCRIPT_COMMAND_MODIFY_NPC_FLAGS:           // 29
                 break;
-            case SCRIPT_COMMAND_SEND_TAXI_PATH:             // 30
+            case SCRIPT_COMMAND_SEND_TAXI_NODE:             // 30
             {
-                if (!sTaxiPathStore.LookupEntry(tmp.sendTaxiPath.taxiPathId))
+                if (!sTaxiNodesStore.LookupEntry(tmp.sendTaxiNode.taxiNodeId))
                 {
-                    sLog.outErrorDb("Table `%s` has datalong = %u in SCRIPT_COMMAND_SEND_TAXI_PATH for script id %u, but this taxi path does not exist.", tablename, tmp.sendTaxiPath.taxiPathId, tmp.id);
+                    sLog.outErrorDb("Table `%s` has datalong = %u in SCRIPT_COMMAND_SEND_TAXI_NODE for script id %u, but this taxi node does not exist.", tablename, tmp.sendTaxiNode.taxiNodeId, tmp.id);
                     continue;
                 }
-                // Check if this taxi path can be triggered with a spell
+                // Check if this taxi node can be triggered with a spell
                 if (!sLog.HasLogFilter(LOG_FILTER_DB_STRICTED_CHECK))
                 {
                     uint32 taxiSpell = 0;
@@ -628,7 +629,7 @@ void ScriptMgr::LoadScripts(ScriptMapMapName& scripts, const char* tablename)
                         if (SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(i))
                             for (int j = 0; j < MAX_EFFECT_INDEX; ++j)
                             {
-                                if (spell->Effect[j] == SPELL_EFFECT_SEND_TAXI && spell->EffectMiscValue[j] == int32(tmp.sendTaxiPath.taxiPathId))
+                                if (spell->Effect[j] == SPELL_EFFECT_SEND_TAXI && spell->EffectMiscValue[j] == int32(tmp.sendTaxiNode.taxiNodeId))
                                 {
                                     taxiSpell = i;
                                     break;
@@ -638,7 +639,7 @@ void ScriptMgr::LoadScripts(ScriptMapMapName& scripts, const char* tablename)
 
                     if (taxiSpell)
                     {
-                        sLog.outErrorDb("Table `%s` has datalong = %u in SCRIPT_COMMAND_SEND_TAXI_PATH for script id %u, but this taxi path can be triggered by spell %u.", tablename, tmp.sendTaxiPath.taxiPathId, tmp.id, taxiSpell);
+                        sLog.outErrorDb("Table `%s` has datalong = %u in SCRIPT_COMMAND_SEND_TAXI_NODE for script id %u, but this taxi node can be triggered by spell %u.", tablename, tmp.sendTaxiNode.taxiNodeId, tmp.id, taxiSpell);
                         continue;
                     }
                 }
@@ -1962,14 +1963,728 @@ bool ScriptAction::HandleScriptStep()
 
             break;
         }
-        case SCRIPT_COMMAND_SEND_TAXI_PATH:                 // 30
+        case SCRIPT_COMMAND_SEND_TAXI_NODE:                 // 30
         {
             // only Player
             Player* pPlayer = GetPlayerTargetOrSourceAndLog(pSource, pTarget);
             if (!pPlayer)
                 break;
 
-            pPlayer->ActivateTaxiPathTo(m_script->sendTaxiPath.taxiPathId);
+			uint32 fromNode = sObjectMgr.GetNearestTaxiNode(pPlayer->GetPositionX(), pPlayer->GetPositionY(), pPlayer->GetPositionZ(), pPlayer->GetMapId(), pPlayer->GetTeam());
+
+            vector<uint32> nodes = { fromNode };
+
+            map<uint32, map<uint32, uint32>> sourceDestinationNode = {
+                {2, { // Stormwind
+                    {7, 6}, // Menethil Harbor
+                    {8, 6}, // Thelsamar
+                    {14, 6}, // Southshore
+                    {16, 6}, // Refuge Pointe
+                    {43, 6}, // Aerie Peak
+                    {66, 6}, // Chillwind Camp
+                    {67, 6}, // Light's Hope Chapel
+                    {74, 71} // Thorium Point
+                }},
+                {4, { // Sentinel Hill
+                    {6, 2}, // Ironforge
+                    {7, 2}, // Menethil Harbor
+                    {8, 2}, // Thelsamar
+                    {14, 2}, // Southshore
+                    {16, 2}, // Refuge Pointe
+                    {43, 2}, // Aerie Peak
+                    {45, 12}, // Nethergarde Keep
+                    {66, 2}, // Chillwind Camp
+                    {67, 2}, // Light's Hope Chapel
+                    {71, 5}, // Morgan's Vigil
+                    {74, 5} // Thorium Point
+                }},
+                {5, { // Lakeshire
+                    {6, 71}, // Ironforge
+                    {7, 71}, // Menethil Harbor
+                    {8, 71}, // Thelsamar
+                    {9, 12}, // Booty Bay
+                    {14, 71}, // Southshore
+                    {16, 71}, // Refuge Pointe
+                    {43, 71}, // Aerie Peak
+                    {45, 12}, // Nethergarde Keep
+                    {66, 71}, // Chillwind Camp
+                    {67, 71}, // Light's Hope Chapel
+                    {74, 71} // Thorium Point
+                }},
+                {6, { // Ironforge
+                    {5, 74}, // Lakeshire
+                    {9, 2}, // Booty Bay
+                    {12, 74}, // Darkshire
+                    {45, 74}, // Nethergarde Keep
+                    {71, 74}, // Morgan's Vigil
+                }},
+                {7, { // Menethil Harbor
+                    {2, 6}, // Stormwind
+                    {4, 6}, // Sentinel Hill
+                    {5, 6}, // Lakeshire
+                    {9, 6}, // Booty Bay
+                    {12, 6}, // Darkshire
+                    {43, 14}, // Aerie Peak
+                    {45, 6}, // Nethergarde Keep
+                    {66, 14}, // Chillwind Camp
+                    {67, 14}, // Light's Hope Chapel
+                    {71, 6}, // Morgan's Vigil
+                    {74, 6} // Thorium Point
+                }},
+                {8, { // Thelsamar
+                    {2, 6}, // Stormwind
+                    {4, 6}, // Sentinel Hill
+                    {5, 6}, // Lakeshire
+                    {9, 6}, // Booty Bay
+                    {12, 6}, // Darkshire
+                    {14, 16}, // Southshore
+                    {43, 16}, // Aerie Peak
+                    {45, 6}, // Nethergarde Keep
+                    {66, 16}, // Chillwind Camp
+                    {67, 16}, // Light's Hope Chapel
+                    {71, 6}, // Morgan's Vigil
+                    {74, 6} // Thorium Point
+                }},
+                {9, { // Booty Bay
+                    {5, 12}, // Lakeshire
+                    {6, 2}, // Ironforge
+                    {7, 2}, // Menethil Harbor
+                    {8, 2}, // Thelsamar
+                    {14, 2}, // Southshore
+                    {16, 2}, // Refuge Pointe
+                    {43, 2}, // Aerie Peak
+                    {45, 12}, // Nethergarde Keep
+                    {66, 2}, // Chillwind Camp
+                    {67, 2}, // Light's Hope Chapel
+                    {71, 12}, // Morgan's Vigil
+                    {74, 12} // Thorium Point
+                }},
+                {10, { // The Sepulcher
+                    {17, 13}, // Hammerfall
+                    {19, 13}, // Booty Bay
+                    {20, 13}, // Grom'gol
+                    {21, 13}, // Kargath
+                    {56, 13}, // Stonard
+                    {68, 11}, // Light's Hope Chapel
+                    {70, 13}, // Flame Crest
+                    {75, 13} // Thorium Point
+                }},
+                {11, { // Undercity
+                    {19, 21}, // Booty Bay
+                    {20, 21}, // Grom'gol
+                    {56, 21}, // Stonard
+                    {70, 21}, // Flame Crest
+                    {75, 21} // Thorium Point
+                }},
+                {12, { // Darkshire
+                    {6, 5}, // Ironforge
+                    {7, 5}, // Menethil Harbor
+                    {8, 5}, // Thelsamar
+                    {14, 5}, // Southshore
+                    {16, 5}, // Refuge Pointe
+                    {43, 5}, // Aerie Peak
+                    {66, 5}, // Chillwind Camp
+                    {67, 5}, // Light's Hope Chapel
+                    {71, 5}, // Morgan's Vigil
+                    {74, 5} // Thorium Point
+                }},
+                {13, { // Tarren Mill
+                    {19, 17}, // Booty Bay
+                    {20, 17}, // Grom'gol
+                    {21, 17}, // Kargath
+                    {56, 17}, // Stonard
+                    {68, 76}, // Light's Hope Chapel
+                    {70, 17}, // Flame Crest
+                    {75, 17} // Thorium Point
+                }},
+                {14, { // Southshore
+                    {2, 7}, // Stormwind
+                    {4, 7}, // Sentinel Hill
+                    {5, 7}, // Lakeshire
+                    {8, 16}, // Thelsamar
+                    {9, 7}, // Booty Bay
+                    {12, 7}, // Darkshire
+                    {45, 7}, // Nethergarde Keep
+                    {67, 43}, // Light's Hope Chapel
+                    {71, 7}, // Morgan's Vigil
+                    {74, 7} // Thorium Point
+                }},
+                {16, { // Refuge Pointe
+                    {2, 7}, // Stormwind
+                    {4, 7}, // Sentinel Hill
+                    {5, 7}, // Lakeshire
+                    {9, 7}, // Booty Bay
+                    {12, 7}, // Darkshire
+                    {45, 7}, // Nethergarde Keep
+                    {66, 43}, // Chillwind Camp
+                    {67, 43}, // Light's Hope Chapel
+                    {71, 7}, // Morgan's Vigil
+                    {74, 7} // Thorium Point
+                }},
+                {17, { // Hammerfall
+                    {10, 13}, // The Sepulcher
+                    {19, 21}, // Booty Bay
+                    {20, 21}, // Grom'gol
+                    {56, 21}, // Stonard
+                    {68, 76}, // Light's Hope Chapel
+                    {70, 21}, // Flame Crest
+                    {75, 21} // Thorium Point
+                }},
+                {19, { // Booty Bay
+                    {10, 20}, // The Sepulcher
+                    {11, 20}, // Undercity
+                    {13, 20}, // Tarren Mill
+                    {17, 20}, // Hammerfall
+                    {68, 20}, // Light's Hope Chapel
+                    {70, 56}, // Flame Crest
+                    {75, 20}, // Thorium Point
+                    {76, 20} // Revantusk Village
+                }},
+                {20, { // Grom'gol
+                    {10, 21}, // The Sepulcher
+                    {11, 21}, // Undercity
+                    {13, 21}, // Tarren Mill
+                    {17, 21}, // Hammerfall
+                    {68, 21}, // Light's Hope Chapel
+                    {70, 56}, // Flame Crest
+                    {75, 21}, // Thorium Point
+                    {76, 21} // Revantusk Village
+                }},
+                {21, { // Kargath
+                    {10, 17}, // The Sepulcher
+                    {13, 17}, // Tarren Mill
+                    {68, 17}, // Light's Hope Chapel
+                    {76, 17} // Revantusk Village
+                }},
+                {22, { // Thunder Bluff
+                    {48, 25}, // Bloodvenom Post
+                    {53, 44}, // Everlook
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 23}, // Splintertree Post
+                    {69, 44}, // Moonglade
+                    {72, 42} // Cenarion Hold
+                }},
+                {23, { // Orgrimmar
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 25}, // Freewind Post
+                    {38, 22}, // Shadowprey Village
+                    {42, 25}, // Camp Mojache
+                    {58, 61}, // Zoram'gar Outpost
+                    {69, 44}, // Moonglade
+                    {72, 25}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {25, { // Crossroads
+                    {38, 22}, // Shadowprey Village
+                    {53, 44}, // Everlook
+                    {69, 48}, // Moonglade
+                    {72, 42} // Cenarion Hold
+                }},
+                {26, { // Auberdine
+                    {31, 33}, // Thalanaar
+                    {39, 28}, // Gadgetzan
+                    {52, 49}, // Everlook
+                    {73, 33} // Cenarion Hold
+                }},
+                {27, { // Rut'theran Village
+                    {28, 26}, // Astranaar
+                    {31, 26}, // Thalanaar
+                    {32, 26}, // Theramore
+                    {33, 26}, // Stonetalon Peak
+                    {37, 26}, // Nijel's Point
+                    {39, 26}, // Gadgetzan
+                    {41, 26}, // Feathermoon Stronghold
+                    {49, 26}, // Moonglade
+                    {52, 26}, // Everlook
+                    {64, 26}, // Talrendis Point
+                    {65, 26}, // Talonbranch Glade
+                    {73, 26} // Cenarion Hold
+                }},
+                {28, { // Astranaar
+                    {27, 26}, // Rut'theran Village
+                    {31, 64}, // Thalanaar
+                    {32, 64}, // Theramore
+                    {37, 33}, // Nijel's Point
+                    {39, 64}, // Gadgetzan
+                    {41, 33}, // Feathermoon Stronghold
+                    {49, 26}, // Moonglade
+                    {52, 64}, // Everlook
+                    {65, 26}, // Talonbranch Glade
+                    {73, 33} // Cenarion Hold
+                }},
+                {29, { // Sun Rock Retreat
+                    {23, 25}, // Orgrimmar
+                    {30, 25}, // Freewind Post
+                    {40, 25}, // Gadgetzan
+                    {42, 38}, // Camp Mojache
+                    {44, 25}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 25}, // Everlook
+                    {55, 25}, // Brackenwall Village
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 25}, // Splintertree Post
+                    {69, 25}, // Moonglade
+                    {72, 38}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {30, { // Freewind Post
+                    {23, 25}, // Orgrimmar
+                    {29, 25}, // Sun Rock Retreat
+                    {38, 42}, // Shadowprey Village
+                    {44, 25}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 25}, // Everlook
+                    {55, 40}, // Brackenwall Village
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 25}, // Splintertree Post
+                    {69, 25}, // Moonglade
+                    {72, 42} // Cenarion Hold
+                }},
+                {31, { // Thalanaar
+                    {26, 41}, // Auberdine
+                    {27, 41}, // Rut'theran Village
+                    {28, 32}, // Astranaar
+                    {33, 41}, // Stonetalon Peak
+                    {37, 41}, // Nijel's Point
+                    {49, 32}, // Moonglade
+                    {52, 32}, // Everlook
+                    {64, 32}, // Talrendis Point
+                    {65, 32}, // Talonbranch Glade
+                    {73, 41} // Cenarion Hold
+                }},
+                {32, { // Theramore
+                    {27, 80}, // Rut'theran Village
+                    {28, 80}, // Astranaar
+                    {33, 37}, // Stonetalon Peak
+                    {41, 31}, // Feathermoon Stronghold
+                    {49, 80}, // Moonglade
+                    {52, 80}, // Everlook
+                    {65, 80}, // Talonbranch Glade
+                    {73, 39} // Cenarion Hold
+                }},
+                {33, { // Stonetalon Peak
+                    {27, 26}, // Rut'theran Village
+                    {31, 37}, // Thalanaar
+                    {32, 37}, // Theramore
+                    {39, 37}, // Gadgetzan
+                    {41, 37}, // Feathermoon Stronghold
+                    {49, 26}, // Moonglade
+                    {52, 26}, // Everlook
+                    {64, 28}, // Talrendis Point
+                    {65, 26}, // Talonbranch Glade
+                    {73, 37} // Cenarion Hold
+                }},
+                {37, { // Nijel's Point
+                    {27, 26}, // Rut'theran Village
+                    {28, 33}, // Astranaar
+                    {31, 41}, // Thalanaar
+                    {39, 32}, // Gadgetzan
+                    {49, 26}, // Moonglade
+                    {52, 26}, // Everlook
+                    {64, 33}, // Talrendis Point
+                    {65, 26}, // Talonbranch Glade
+                    {73, 41} // Cenarion Hold
+                }},
+                {38, { // Shadowprey Village
+                    {23, 22}, // Orgrimmar
+                    {25, 29}, // Crossroads
+                    {30, 42}, // Freewind Post
+                    {40, 42}, // Gadgetzan
+                    {44, 22}, // Valormok
+                    {48, 29}, // Bloodvenom Post
+                    {53, 22}, // Everlook
+                    {55, 22}, // Brackenwall Village
+                    {58, 29}, // Zoram'gar Outpost
+                    {61, 29}, // Splintertree Post
+                    {69, 29}, // Moonglade
+                    {72, 42}, // Cenarion Hold
+                    {77, 22} // Camp Taurajo
+                }},
+                {39, { // Gadgetzan (Alliance )
+                    {26, 32}, // Auberdine
+                    {27, 32}, // Rut'theran Village
+                    {28, 32}, // Astranaar
+                    {33, 32}, // Stonetalon Peak
+                    {37, 32}, // Nijel's Point
+                    {41, 31}, // Feathermoon Stronghold
+                    {49, 32}, // Moonglade
+                    {52, 32}, // Everlook
+                    {64, 32}, // Talrendis Point
+                    {65, 32} // Talonbranch Glade
+                }},
+                {40, { // Gadgetzan (Horde)
+                    {29, 30}, // Sun Rock Retreat
+                    {38, 30}, // Shadowprey Village
+                    {44, 30}, // Valormok
+                    {48, 30}, // Bloodvenom Post
+                    {53, 30}, // Everlook
+                    {58, 30}, // Zoram'gar Outpost
+                    {61, 30}, // Splintertree Post
+                    {69, 30}, // Moonglade
+                    {77, 30} // Camp Taurajo
+                }},
+                {41, { // Feathermoon Stronghold
+                    {27, 26}, // Rut'theran Village
+                    {28, 37}, // Astranaar
+                    {32, 31}, // Theramore
+                    {33, 37}, // Stonetalon Peak
+                    {39, 31}, // Gadgetzan
+                    {49, 26}, // Moonglade
+                    {52, 26}, // Everlook
+                    {64, 31}, // Talrendis Point
+                    {65, 26} // Talonbranch Glade
+                }},
+                {42, { // Camp Mojache
+                    {23, 25}, // Orgrimmar
+                    {29, 38}, // Sun Rock Retreat
+                    {44, 25}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 25}, // Everlook
+                    {55, 25}, // Brackenwall Village
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 25}, // Splintertree Post
+                    {69, 25}, // Moonglade
+                    {77, 30} // Camp Taurajo
+                }},
+                {43, { // Aerie Peak
+                    {2, 6}, // Stormwind
+                    {4, 6}, // Sentinel Hill
+                    {5, 6}, // Lakeshire
+                    {7, 14}, // Menethil Harbor
+                    {8, 16}, // Thelsamar
+                    {9, 6}, // Booty Bay
+                    {12, 6}, // Darkshire
+                    {45, 6}, // Nethergarde Keep
+                    {71, 6}, // Morgan's Vigil
+                    {74, 6} // Thorium Point
+                }},
+                {44, { // Valormok
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 25}, // Freewind Post
+                    {38, 22}, // Shadowprey Village
+                    {40, 23}, // Gadgetzan
+                    {42, 25}, // Camp Mojache
+                    {55, 23}, // Brackenwall Village
+                    {58, 61}, // Zoram'gar Outpost
+                    {69, 53}, // Moonglade
+                    {72, 25}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {45, { // Nethergarde Keep
+                    {4, 12}, // Sentinel Hill
+                    {5, 12}, // Lakeshire
+                    {6, 2}, // Ironforge
+                    {7, 2}, // Menethil Harbor
+                    {8, 2}, // Thelsamar
+                    {9, 12}, // Booty Bay
+                    {14, 2}, // Southshore
+                    {16, 2}, // Refuge Pointe
+                    {43, 2}, // Aerie Peak
+                    {66, 2}, // Chillwind Camp
+                    {67, 2}, // Light's Hope Chapel
+                    {74, 71} // Thorium Point
+                }},
+                {48, { // Bloodvenom Post
+                    {22, 25}, // Thunder Bluff
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 25}, // Freewind Post
+                    {38, 25}, // Shadowprey Village
+                    {40, 25}, // Gadgetzan
+                    {42, 25}, // Camp Mojache
+                    {55, 25}, // Brackenwall Village
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 44}, // Splintertree Post
+                    {72, 25}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {49, { // Moonglade
+                    {27, 26}, // Rut'theran Village
+                    {28, 26}, // Astranaar
+                    {31, 52}, // Thalanaar
+                    {32, 52}, // Theramore
+                    {33, 26}, // Stonetalon Peak
+                    {37, 26}, // Nijel's Point
+                    {39, 52}, // Gadgetzan
+                    {41, 26}, // Feathermoon Stronghold
+                    {64, 52}, // Talrendis Point
+                    {73, 26} // Cenarion Hold
+                }},
+                {52, { // Everlook (Alliance)
+                    {26, 49}, // Auberdine
+                    {27, 49}, // Rut'theran Village
+                    {28, 64}, // Astranaar
+                    {31, 64}, // Thalanaar
+                    {32, 64}, // Theramore
+                    {33, 49}, // Stonetalon Peak
+                    {37, 49}, // Nijel's Point
+                    {39, 64}, // Gadgetzan
+                    {41, 64}, // Feathermoon Stronghold
+                    {73, 64} // Cenarion Hold
+                }},
+                {53, { // Everlook (Horde)
+                    {22, 44}, // Thunder Bluff
+                    {25, 44}, // Crossroads
+                    {29, 44}, // Sun Rock Retreat
+                    {30, 44}, // Freewind Post
+                    {38, 44}, // Shadowprey Village
+                    {40, 44}, // Gadgetzan
+                    {42, 44}, // Camp Mojache
+                    {55, 44}, // Brackenwall Village
+                    {58, 44}, // Zoram'gar Outpost
+                    {61, 44}, // Splintertree Post
+                    {72, 44}, // Cenarion Hold
+                    {77, 44} // Camp Taurajo
+                }},
+                {55, { // Brackenwall Village
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 40}, // Freewind Post
+                    {38, 22}, // Shadowprey Village
+                    {42, 40}, // Camp Mojache
+                    {44, 25}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 25}, // Everlook
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 25}, // Splintertree Post
+                    {69, 25}, // Moonglade
+                    {72, 40}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {56, { // Stonard
+                    {10, 21}, // The Sepulcher
+                    {11, 21}, // Undercity
+                    {13, 21}, // Tarren Mill
+                    {17, 21}, // Hammerfall
+                    {68, 21}, // Light's Hope Chapel
+                    {75, 70}, // Thorium Point
+                    {76, 21} // Revantusk Village
+                }},
+                {58, { // Zoram'gar Outpost
+                    {22, 25}, // Thunder Bluff
+                    {23, 61}, // Orgrimmar
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 25}, // Freewind Post
+                    {38, 25}, // Shadowprey Village
+                    {40, 25}, // Gadgetzan
+                    {42, 25}, // Camp Mojache
+                    {44, 61}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 61}, // Everlook
+                    {55, 25}, // Brackenwall Village
+                    {69, 61}, // Moonglade
+                    {72, 25}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {61, { // Splintertree Post
+                    {22, 23}, // Thunder Bluff
+                    {29, 25}, // Sun Rock Retreat
+                    {30, 25}, // Freewind Post
+                    {38, 23}, // Shadowprey Village
+                    {40, 23}, // Gadgetzan
+                    {42, 25}, // Camp Mojache
+                    {48, 44}, // Bloodvenom Post
+                    {53, 44}, // Everlook
+                    {55, 23}, // Brackenwall Village
+                    {69, 44}, // Moonglade
+                    {72, 25}, // Cenarion Hold
+                    {77, 25} // Camp Taurajo
+                }},
+                {64, { // Talrendis Point
+                    {27, 26}, // Rut'theran Village
+                    {31, 32}, // Thalanaar
+                    {33, 28}, // Stonetalon Peak
+                    {37, 28}, // Nijel's Point
+                    {39, 32}, // Gadgetzan
+                    {41, 32}, // Feathermoon Stronghold
+                    {49, 52}, // Moonglade
+                    {73, 32} // Cenarion Hold
+                }},
+                {65, { // Talonbranch Glade
+                    {27, 26}, // Rut'theran Village
+                    {28, 26}, // Astranaar
+                    {31, 64}, // Thalanaar
+                    {32, 64}, // Theramore
+                    {33, 26}, // Stonetalon Peak
+                    {37, 26}, // Nijel's Point
+                    {39, 64}, // Gadgetzan
+                    {41, 26}, // Feathermoon Stronghold
+                    {73, 26} // Cenarion Hold
+                }},
+                {66, { // Chillwind Camp
+                    {2, 6}, // Stormwind
+                    {4, 6}, // Sentinel Hill
+                    {5, 6}, // Lakeshire
+                    {7, 14}, // Menethil Harbor
+                    {8, 43}, // Thelsamar
+                    {9, 6}, // Booty Bay
+                    {12, 6}, // Darkshire
+                    {16, 43}, // Refuge Pointe
+                    {45, 6}, // Nethergarde Keep
+                    {71, 6}, // Morgan's Vigil
+                    {74, 6} // Thorium Point
+                }},
+                {67, { // Light's Hope Chapel (Alliance)
+                    {2, 6}, // Stormwind
+                    {4, 6}, // Sentinel Hill
+                    {5, 6}, // Lakeshire
+                    {7, 66}, // Menethil Harbor
+                    {8, 43}, // Thelsamar
+                    {9, 6}, // Booty Bay
+                    {12, 6}, // Darkshire
+                    {14, 66}, // Southshore
+                    {16, 43}, // Refuge Pointe
+                    {45, 6}, // Nethergarde Keep
+                    {71, 6}, // Morgan's Vigil
+                    {74, 6} // Thorium Point
+                }},
+                {68, { // Light's Hope Chapel (Horde)
+                    {10, 11}, // The Sepulcher
+                    {13, 76}, // Tarren Mill
+                    {17, 76}, // Hammerfall
+                    {19, 76}, // Booty Bay
+                    {20, 76}, // Grom'gol
+                    {21, 76}, // Kargath
+                    {56, 76}, // Stonard
+                    {70, 76}, // Flame Crest
+                    {75, 76} // Thorium Point
+                }},
+                {69, { // Moonglade
+                    {22, 53}, // Thunder Bluff
+                    {23, 53}, // Orgrimmar
+                    {25, 48}, // Crossroads
+                    {29, 48}, // Sun Rock Retreat
+                    {30, 48}, // Freewind Post
+                    {38, 53}, // Shadowprey Village
+                    {40, 48}, // Gadgetzan
+                    {42, 48}, // Camp Mojache
+                    {44, 53}, // Valormok
+                    {55, 53}, // Brackenwall Village
+                    {58, 53}, // Zoram'gar Outpost
+                    {61, 53}, // Splintertree Post
+                    {72, 48}, // Cenarion Hold
+                    {77, 48} // Camp Taurajo
+                }},
+                {70, { // Flame Crest
+                    {10, 21}, // The Sepulcher
+                    {11, 21}, // Undercity
+                    {13, 21}, // Tarren Mill
+                    {17, 21}, // Hammerfall
+                    {19, 56}, // Booty Bay
+                    {20, 56}, // Grom'gol
+                    {68, 21}, // Light's Hope Chapel
+                    {75, 21}, // Thorium Point
+                    {76, 21} // Revantusk Village
+                }},
+                {71, { // Morgan's Vigil
+                    {4, 5}, // Sentinel Hill
+                    {6, 74}, // Ironforge
+                    {7, 74}, // Menethil Harbor
+                    {8, 74}, // Thelsamar
+                    {9, 5}, // Booty Bay
+                    {12, 5}, // Darkshire
+                    {14, 74}, // Southshore
+                    {16, 74}, // Refuge Pointe
+                    {43, 74}, // Aerie Peak
+                    {66, 74}, // Chillwind Camp
+                    {67, 74} // Light's Hope Chapel
+                }},
+                {72, { // Cenarion Hold (Horde)
+                    {22, 42}, // Thunder Bluff
+                    {23, 42}, // Orgrimmar
+                    {25, 42}, // Crossroads
+                    {29, 42}, // Sun Rock Retreat
+                    {30, 42}, // Freewind Post
+                    {38, 42}, // Shadowprey Village
+                    {44, 42}, // Valormok
+                    {48, 42}, // Bloodvenom Post
+                    {53, 42}, // Everlook
+                    {55, 79}, // Brackenwall Village
+                    {58, 42}, // Zoram'gar Outpost
+                    {61, 42}, // Splintertree Post
+                    {69, 42}, // Moonglade
+                    {77, 42} // Camp Taurajo
+                }},
+                {73, { // Cenarion Hold (Alliance)
+                    {26, 41}, // Auberdine
+                    {27, 41}, // Rut'theran Village
+                    {28, 41}, // Astranaar
+                    {31, 41}, // Thalanaar
+                    {32, 39}, // Theramore
+                    {33, 41}, // Stonetalon Peak
+                    {37, 41}, // Nijel's Point
+                    {49, 41}, // Moonglade
+                    {52, 39}, // Everlook
+                    {64, 39}, // Talrendis Point
+                    {65, 41} // Talonbranch Glade
+                }},
+                {74, { // Thorium Point (Alliance)
+                    {2, 71}, // Stormwind
+                    {4, 71}, // Sentinel Hill
+                    {5, 71}, // Lakeshire
+                    {7, 6}, // Menethil Harbor
+                    {8, 6}, // Thelsamar
+                    {9, 71}, // Booty Bay
+                    {12, 71}, // Darkshire
+                    {14, 6}, // Southshore
+                    {16, 6}, // Refuge Pointe
+                    {43, 6}, // Aerie Peak
+                    {45, 71}, // Nethergarde Keep
+                    {66, 6}, // Chillwind Camp
+                    {67, 6} // Light's Hope Chapel
+                }},
+                {75, { // Thorium Point (Horde)
+                    {10, 21}, // The Sepulcher
+                    {11, 21}, // Undercity
+                    {13, 21}, // Tarren Mill
+                    {17, 21}, // Hammerfall
+                    {19, 21}, // Booty Bay
+                    {20, 21}, // Grom'gol
+                    {56, 70}, // Stonard
+                    {68, 21}, // Light's Hope Chapel
+                    {76, 21} // Revantusk Village
+                }},
+                {76, { // Revantusk Village
+                    {10, 13}, // The Sepulcher
+                    {19, 17}, // Booty Bay
+                    {20, 17}, // Grom'gol
+                    {21, 17}, // Kargath
+                    {56, 17}, // Stonard
+                    {70, 17}, // Flame Crest
+                    {76, 17} // Revantusk Village
+                }},
+                {77, { // Camp Taurajo
+                    {23, 25}, // Orgrimmar
+                    {29, 25}, // Sun Rock Retreat
+                    {38, 22}, // Shadowprey Village
+                    {40, 30}, // Gadgetzan
+                    {42, 30}, // Camp Mojache
+                    {44, 25}, // Valormok
+                    {48, 25}, // Bloodvenom Post
+                    {53, 25}, // Everlook
+                    {55, 25}, // Brackenwall Village
+                    {58, 25}, // Zoram'gar Outpost
+                    {61, 25}, // Splintertree Post
+                    {69, 25}, // Moonglade
+                    {72, 30} // Cenarion Hold
+                }},
+                {79, { // Marshal's Refuge
+                    {55, 40} // Brackenwall Village
+                }}
+            };
+
+            uint32 toNode = m_script->sendTaxiNode.taxiNodeId;
+
+            for (uint32 currentSourceNode = fromNode; sourceDestinationNode[currentSourceNode].count(toNode);)
+            {
+                uint32 intermediateNode = sourceDestinationNode[currentSourceNode][toNode];
+                
+                nodes.push_back(intermediateNode);
+
+                currentSourceNode = intermediateNode;
+            }
+
+            nodes.push_back(toNode);
+			
+			pPlayer->ActivateTaxiPathTo(nodes);
             break;
         }
         case SCRIPT_COMMAND_TERMINATE_SCRIPT:               // 31
