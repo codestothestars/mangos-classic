@@ -63,6 +63,7 @@ class ReputationMgr
         void SaveToDB();
         void LoadFromDB(QueryResult* result);
     public:                                                 // statics
+        static const int32 OppositeTeamBaseReputation;
         static const int32 PointsInRank[MAX_REPUTATION_RANK];
         static const int32 Reputation_Cap    =  42999;
         static const int32 Reputation_Bottom = -42000;
@@ -111,6 +112,7 @@ class ReputationMgr
     private:                                                // internal helper functions
         void Initialize();
         uint32 GetDefaultStateFlags(const FactionEntry* factionEntry) const;
+		bool IsOppositeTeam(FactionEntry const* factionEntry) const;
         bool SetReputation(FactionEntry const* factionEntry, int32 standing, bool incremental);
         bool SetOneFactionReputation(FactionEntry const* factionEntry, int32 standing, bool incremental);
         void SetVisible(FactionState* faction);

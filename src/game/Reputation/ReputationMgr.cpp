@@ -23,6 +23,10 @@
 #include "Globals/ObjectMgr.h"
 using namespace std;
 
+const int32 ReputationMgr::OppositeTeamBaseReputation =
+	PointsInRank[ReputationRank::REP_HATED] +
+	PointsInRank[ReputationRank::REP_HOSTILE] +
+	PointsInRank[ReputationRank::REP_UNFRIENDLY];
 const int32 ReputationMgr::PointsInRank[MAX_REPUTATION_RANK] = {36000, 3000, 3000, 3000, 6000, 12000, 21000, 1000};
 
 ReputationRank ReputationMgr::ReputationToRank(int32 standing)
@@ -100,7 +104,7 @@ int32 ReputationMgr::GetBaseReputation(FactionEntry const* factionEntry) const
 	};
 
 	if (find(std::begin(playerFactions), std::end(playerFactions), factionEntry->ID) != end(playerFactions)) {
-		return 42000;
+		return OppositeTeamBaseReputation;
 	}
 
     int idx = factionEntry->GetIndexFitTo(raceMask, classMask);
@@ -135,6 +139,12 @@ bool ReputationMgr::IsAtWar(FactionEntry const* factionEntry) const
 ReputationRank ReputationMgr::GetRank(FactionEntry const* factionEntry) const
 {
     int32 reputation = GetReputation(factionEntry);
+
+	if (IsOppositeTeam(factionEntry))
+	{
+		reputation -= OppositeTeamBaseReputation * 2;
+	}
+
     return ReputationToRank(reputation);
 }
 
@@ -304,64 +314,74 @@ void ReputationMgr::Initialize()
             newFaction.needSend = true;
             newFaction.needSave = true;
 
-			uint32 allianceFactions[] = {
-				47,  // Ironforge
-				54,  // Gnomeregan Exiles
-				69,  // Darnassus
-				72,  // Stormwind
-				108, // Theramore
-				509, // The League of Arathor
-				589, // Wintersaber Trainers
-				730, // Stormpike Guard
-				890  // Silverwing Sentinels
-			};
-
-			uint32 allianceRaces[] = {
-				1,  // Human
-				4,  // Dwarf
-				8,  // Night Elf
-				64, // Gnome
-			};
-
-			uint32 hordeFactions[] = {
-				68,  // Undercity
-				76,  // Orgrimmar
-				81,  // Thunder Bluff
-				510, // The Defilers
-				530, // Darkspear Trolls
-				729, // Frostwolf Clan
-				889, // Warsong Outriders
-			};
-
-			uint32 hordeRaces[] = {
-				2,   // Orc
-				16,  // Undead
-				32,  // Tauren
-				128, // Troll
-			};
-
-			vector<int> playerFactions;
-			playerFactions.reserve(size(allianceFactions) + size(hordeFactions));
-			playerFactions.insert(playerFactions.end(), begin(allianceFactions), end(allianceFactions));
-			playerFactions.insert(playerFactions.end(), begin(hordeFactions),    end(hordeFactions));
-
-			if (find(std::begin(playerFactions), std::end(playerFactions), newFaction.ID) != end(playerFactions)) {
-				uint32 race = m_player->getRaceMask();
-
-				if (
-					find(std::begin(allianceRaces),    std::end(allianceRaces),    race)		  != end(allianceRaces) &&
-					find(std::begin(hordeFactions), std::end(hordeFactions), newFaction.ID) != end(hordeFactions)
-					||
-					find(std::begin(hordeRaces),	std::end(hordeRaces),	 race)			!= end(hordeRaces) &&
-					find(std::begin(allianceFactions), std::end(allianceFactions), newFaction.ID) != end(allianceFactions)
-				) {
-					newFaction.Standing = 42000;
-				}
+			if (IsOppositeTeam(factionEntry)) {
+				newFaction.Standing = OppositeTeamBaseReputation;
 			}
 
             m_factions[newFaction.ReputationListID] = newFaction;
         }
     }
+}
+
+bool ReputationMgr::IsOppositeTeam(FactionEntry const* factionEntry) const
+{
+	if (!factionEntry)
+	{
+		return false;
+	}
+
+	uint32 allianceRaces[] = {
+		RACE_DWARF,
+		RACE_GNOME,
+		RACE_HUMAN,
+		RACE_NIGHTELF
+	};
+
+	uint32 allianceFactions[] = {
+		47,  // Ironforge
+		54,  // Gnomeregan Exiles
+		69,  // Darnassus
+		72,  // Stormwind
+		108, // Theramore
+		509, // The League of Arathor
+		589, // Wintersaber Trainers
+		730, // Stormpike Guard
+		890  // Silverwing Sentinels
+	};
+
+	uint32 faction = factionEntry->ID;
+
+	uint32 hordeFactions[] = {
+		68,  // Undercity
+		76,  // Orgrimmar
+		81,  // Thunder Bluff
+		510, // The Defilers
+		530, // Darkspear Trolls
+		729, // Frostwolf Clan
+		889, // Warsong Outriders
+	};
+
+	uint8 race = m_player->getRace();
+
+	uint32 hordeRaces[] = {
+		RACE_ORC,
+		RACE_TAUREN,
+		RACE_TROLL,
+		RACE_UNDEAD
+	};
+
+	bool allianceFaction = find(std::begin(allianceFactions), std::end(allianceFactions), faction) != end(allianceFactions);
+	
+	bool alliancePlayer = find(std::begin(allianceRaces), std::end(allianceRaces), race) != end(allianceRaces);
+
+	bool hordeFaction = find(std::begin(hordeFactions), std::end(hordeFactions), faction) != end(hordeFactions);
+
+	bool hordePlayer = find(std::begin(hordeRaces), std::end(hordeRaces), race) != end(hordeRaces);
+
+	bool hordePlayerAllianceFaction = hordePlayer && allianceFaction;
+	bool alliancePlayerHordeFaction = alliancePlayer && hordeFaction;
+
+	return alliancePlayerHordeFaction || hordePlayerAllianceFaction;
 }
 
 bool ReputationMgr::SetReputation(FactionEntry const* factionEntry, int32 standing, bool incremental)
