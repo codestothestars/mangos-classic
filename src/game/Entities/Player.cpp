@@ -11295,14 +11295,9 @@ void Player::PrepareGossipMenu(WorldObject* pSource, uint32 menuId)
 
         if (gossipMenu.conditionId && !sObjectMgr.IsPlayerMeetToCondition(gossipMenu.conditionId, this, GetMap(), pSource, CONDITION_FROM_GOSSIP_OPTION))
         {
-            if (isGameMaster())                             // Let GM always see menu items regardless of conditions
-                isGMSkipConditionCheck = true;
-            else
-            {
-                if (gossipMenu.option_id == GOSSIP_OPTION_QUESTGIVER)
-                    canSeeQuests = false;
-                continue;                                   // Skip this option
-            }
+            if (gossipMenu.option_id == GOSSIP_OPTION_QUESTGIVER)
+                canSeeQuests = false;
+            continue;                                   // Skip this option
         }
 
         if (pSource->GetTypeId() == TYPEID_UNIT)
