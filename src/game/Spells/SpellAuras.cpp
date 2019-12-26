@@ -2053,7 +2053,23 @@ void Aura::HandleAuraTransform(bool apply, bool /*Real*/)
         else                                                // m_modifier.m_miscvalue != 0
         {
             CreatureInfo const* ci = ObjectMgr::GetCreatureTemplate(m_modifier.m_miscvalue);
-            if (!ci)
+			if (GetId() == 24753)
+			{
+				switch (urand(0, 4))
+				{
+					// Frog
+					case 0: m_modifier.m_amount = 901; break;
+					// Snake
+					case 1: m_modifier.m_amount = 1206; break;
+					// Cat
+					case 2: m_modifier.m_amount = 5556; break;
+					// Kitten
+					case 3: m_modifier.m_amount = 9990; break;
+					// Mini Diablo
+					case 4: m_modifier.m_amount = 10992; break;
+				}
+			}
+			else if (!ci)
             {
                 m_modifier.m_amount = 16358;                           // pig pink ^_^
                 sLog.outError("Auras: unknown creature id = %d (only need its modelid) Form Spell Aura Transform in Spell ID = %d", m_modifier.m_miscvalue, GetId());
